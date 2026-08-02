@@ -1,0 +1,124 @@
+:root {
+  --bg-color: #0b0e14;
+  --surface-color: #131722;
+  --border-color: #232838;
+  --text-color: #e6e9f0;
+  --text-muted: #8b92a8;
+  --grid-color: #232838;
+  --accent-color: #4da3ff;
+  --accent-color-2: #7c6dfa;
+  --good-color: #3ecf8e;
+  --warn-color: #f5b942;
+  --bad-color: #f5615c;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.app__header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.app__subtitle {
+  margin: 4px 0 24px;
+  color: var(--text-muted);
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+
+.banner--warn {
+  background: rgba(245, 185, 66, 0.12);
+  border: 1px solid rgba(245, 185, 66, 0.4);
+  color: var(--warn-color);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-tile {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.stat-tile__label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+}
+
+.stat-tile__value {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.stat-tile__sublabel {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.stat-tile--good .stat-tile__value {
+  color: var(--good-color);
+}
+
+.stat-tile--warn .stat-tile__value {
+  color: var(--warn-color);
+}
+
+.stat-tile--bad .stat-tile__value {
+  color: var(--bad-color);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.chart-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.chart-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.app__footer {
+  margin-top: 24px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
