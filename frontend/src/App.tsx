@@ -2,6 +2,7 @@ import { FeePercentileChart } from "./components/FeePercentileChart";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
+import { SyncStatus } from "./components/SyncStatus";
 import { fetchHealth, fetchRecentLedgers } from "./api";
 import { usePolling } from "./usePolling";
 
@@ -79,8 +80,12 @@ export function App() {
       </section>
 
       <footer className="app__footer">
-        {health?.lastUpdated && (
-          <span>Backend last synced with Horizon: {new Date(health.lastUpdated).toLocaleTimeString()}</span>
+        {health && (
+          <SyncStatus
+            lastUpdated={health.lastUpdated}
+            secondsSinceLastUpdate={health.secondsSinceLastUpdate}
+            status={health.status}
+          />
         )}
       </footer>
     </div>
