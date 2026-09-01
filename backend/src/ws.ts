@@ -2,7 +2,7 @@ import type { Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
-import { onStoreUpdate, stores } from "./poller.js";
+import { buildSorobanResponse, onStoreUpdate, stores } from "./poller.js";
 
 interface ClientState {
   network: Network;
@@ -22,6 +22,7 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
           health: buildHealthResponse(network),
           ledgers: store.getLedgers(),
           fees: store.getFeeSnapshots(),
+          soroban: buildSorobanResponse(network),
         }),
       );
     }

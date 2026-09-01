@@ -3,10 +3,12 @@ import {
   fetchHealth,
   fetchRecentFees,
   fetchRecentLedgers,
+  fetchSorobanMetrics,
   type FeeSnapshot,
   type HealthResponse,
   type LedgerSample,
   type Network,
+  type SorobanMetricsResponse,
 } from "./api";
 
 const POLL_FALLBACK_MS = 5000;
@@ -15,6 +17,7 @@ export interface SubscriptionData {
   health: HealthResponse | null;
   ledgers: LedgerSample[] | null;
   feeSnapshots: FeeSnapshot[] | null;
+  soroban: SorobanMetricsResponse | null;
   error: string | null;
   isStreaming: boolean;
 }
@@ -23,6 +26,7 @@ export function useSubscription(network: Network): SubscriptionData {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [ledgers, setLedgers] = useState<LedgerSample[] | null>(null);
   const [feeSnapshots, setFeeSnapshots] = useState<FeeSnapshot[] | null>(null);
+  const [soroban, setSoroban] = useState<SorobanMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
@@ -40,15 +44,17 @@ export function useSubscription(network: Network): SubscriptionData {
         return;
       }
       try {
-        const [h, l, f] = await Promise.all([
+        const [h, l, f, s] = await Promise.all([
           fetchHealth(networkRef.current),
           fetchRecentLedgers(networkRef.current),
           fetchRecentFees(networkRef.current),
+          fetchSorobanMetrics(networkRef.current),
         ]);
         if (!cancelled) {
           setHealth(h);
           setLedgers(l);
           setFeeSnapshots(f);
+          setSoroban(s);
           setError(null);
         }
       } catch (err) {
@@ -85,6 +91,9 @@ export function useSubscription(network: Network): SubscriptionData {
             setHealth(payload.health);
             setLedgers(payload.ledgers);
             setFeeSnapshots(payload.fees);
+            if (payload.soroban) {
+              setSoroban(payload.soroban);
+            }
             setError(null);
           }
         } catch {
@@ -128,6 +137,11 @@ export function useSubscription(network: Network): SubscriptionData {
         if (!cancelled) setFeeSnapshots(f);
       })
       .catch(() => {});
+    void fetchSorobanMetrics(network)
+      .then((s) => {
+        if (!cancelled) setSoroban(s);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -142,5 +156,5 @@ export function useSubscription(network: Network): SubscriptionData {
     };
   }, [network]);
 
-  return { health, ledgers, feeSnapshots, error, isStreaming };
+  return { health, ledgers, feeSnapshots, soroban, error, isStreaming };
 }

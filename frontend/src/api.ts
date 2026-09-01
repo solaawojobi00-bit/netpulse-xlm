@@ -102,3 +102,27 @@ export async function fetchHistory(
   if (!res.ok) throw new Error(`GET /api/history failed: ${res.status}`);
   return (await res.json()) as HistoryResponse;
 }
+
+export interface SorobanSample {
+  timestamp: string;
+  invocationsCount: number;
+  successfulCount: number;
+  failedCount: number;
+}
+
+export interface SorobanMetricsResponse {
+  network: string;
+  invocationsPerSecond: number | null;
+  recentInvocationsTotal: number;
+  successfulInvocationsTotal: number;
+  failedInvocationsTotal: number;
+  samples: SorobanSample[];
+}
+
+export async function fetchSorobanMetrics(
+  network: Network = "mainnet",
+): Promise<SorobanMetricsResponse> {
+  const res = await fetch(`/api/soroban?network=${network}`);
+  if (!res.ok) throw new Error(`GET /api/soroban failed: ${res.status}`);
+  return (await res.json()) as SorobanMetricsResponse;
+}

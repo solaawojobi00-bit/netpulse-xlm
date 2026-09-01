@@ -3,7 +3,7 @@ import express from "express";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
 import { db } from "./db.js";
-import { startPolling, stores } from "./poller.js";
+import { buildSorobanResponse, startPolling, stores } from "./poller.js";
 import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -42,6 +42,11 @@ export function createApp(): express.Express {
     const range = req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
     const history = db.getHistory(network, range);
     res.json(history);
+  });
+
+  app.get("/api/soroban", (req, res) => {
+    const network = parseNetwork(req);
+    res.json(buildSorobanResponse(network));
   });
 
   return app;

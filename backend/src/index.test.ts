@@ -8,9 +8,10 @@ vi.mock("./horizon.js", () => ({
   },
   fetchRecentLedgers: vi.fn(),
   fetchFeeStats: vi.fn(),
+  fetchRecentOperations: vi.fn(),
 }));
 
-import { fetchFeeStats, fetchRecentLedgers } from "./horizon.js";
+import { fetchFeeStats, fetchRecentLedgers, fetchRecentOperations } from "./horizon.js";
 import { createApp } from "./index.js";
 import { pollOnce } from "./poller.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
@@ -44,6 +45,7 @@ import { db } from "./db.js";
 describe("Backend API Routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchRecentOperations).mockResolvedValue([]);
   });
 
   afterAll(() => {
@@ -130,6 +132,39 @@ describe("Backend API Routes", () => {
       expect(res.body.points.length).toBeGreaterThan(0);
       expect(res.body.points[0]).toHaveProperty("closeTimeSeconds");
       expect(res.body.points[0]).toHaveProperty("congestionUsage");
+    });
+  });
+
+  describe("GET /api/soroban", () => {
+    it("returns Soroban metrics with invocation counts and rates", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      vi.mocked(fetchRecentOperations).mockResolvedValue([
+        {
+          id: "1",
+          paging_token: "1",
+          transaction_successful: true,
+          type: "invoke_host_function",
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: "2",
+          paging_token: "2",
+          transaction_successful: false,
+          type: "payment",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/soroban");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "mainnet");
+      expect(res.body).toHaveProperty("recentInvocationsTotal", 1);
+      expect(res.body).toHaveProperty("successfulInvocationsTotal", 1);
+      expect(res.body).toHaveProperty("failedInvocationsTotal", 0);
+      expect(Array.isArray(res.body.samples)).toBe(true);
     });
   });
 });
