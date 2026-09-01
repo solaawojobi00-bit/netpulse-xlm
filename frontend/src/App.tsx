@@ -33,6 +33,7 @@ export function App() {
   const { data: health, error: healthError } = usePolling(fetchHealth);
   const { data: ledgers, error: ledgersError } = usePolling(fetchRecentLedgers);
 
+  const isLoading = health === null;
   const isStale = health?.status === "stale";
 
   return (
@@ -55,21 +56,25 @@ export function App() {
           label="Ledger close time"
           value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
           sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
+          loading={isLoading}
         />
         <StatTile
           label="Base fee"
           value={formatStroops(health?.fees.baseFeeStroops ?? null)}
+          loading={isLoading}
         />
         <StatTile
           label="Network congestion"
           value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
           sublabel={health?.congestion.band ?? "unknown"}
           tone={congestionTone[health?.congestion.band ?? "unknown"]}
+          loading={isLoading}
         />
         <StatTile
           label="Throughput"
           value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
           sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
+          loading={isLoading}
         />
       </section>
 
