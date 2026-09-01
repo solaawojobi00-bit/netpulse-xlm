@@ -34,13 +34,50 @@ body {
 .app__header-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app__header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
 .app__header h1 {
   margin: 0;
   font-size: 1.75rem;
+}
+
+.network-selector {
+  display: inline-flex;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.network-selector__btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.network-selector__btn:hover {
+  color: var(--text-color);
+}
+
+.network-selector__btn--active {
+  background: var(--border-color);
+  color: var(--text-color);
+  font-weight: 600;
 }
 
 .network-badge {

@@ -38,14 +38,18 @@ export interface HealthResponse {
   recentLedgerCount: number;
 }
 
-export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch("/api/health");
+export type Network = "mainnet" | "testnet";
+
+export async function fetchHealth(network: Network = "mainnet"): Promise<HealthResponse> {
+  const res = await fetch(`/api/health?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/health failed: ${res.status}`);
   return (await res.json()) as HealthResponse;
 }
 
-export async function fetchRecentLedgers(): Promise<LedgerSample[]> {
-  const res = await fetch("/api/ledgers/recent");
+export async function fetchRecentLedgers(
+  network: Network = "mainnet",
+): Promise<LedgerSample[]> {
+  const res = await fetch(`/api/ledgers/recent?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/ledgers/recent failed: ${res.status}`);
   const body = (await res.json()) as { ledgers: LedgerSample[] };
   return body.ledgers;

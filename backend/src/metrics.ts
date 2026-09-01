@@ -1,9 +1,9 @@
-import { store } from "./poller.js";
+import { HORIZON_URLS, type Network } from "./horizon.js";
+import { stores } from "./poller.js";
 import type { HealthResponse } from "./types.js";
 
 const THROUGHPUT_WINDOW = 20;
 const STALE_AFTER_MS = 3 * Number(process.env.POLL_INTERVAL_MS ?? 6000);
-const HORIZON_URL = process.env.HORIZON_URL ?? "https://horizon.stellar.org";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -25,10 +25,12 @@ export function congestionBand(
   return "high";
 }
 
-export function buildHealthResponse(): HealthResponse {
-  const ledgers = store.getLedgers();
-  const latestFee = store.getLatestFeeSnapshot();
-  const lastSuccessAt = store.getLastSuccessAt();
+export function buildHealthResponse(network: Network = "mainnet"): HealthResponse {
+  const currentStore = stores[network] ?? stores.mainnet;
+  const horizonUrl = HORIZON_URLS[network] ?? HORIZON_URLS.mainnet;
+  const ledgers = currentStore.getLedgers();
+  const latestFee = currentStore.getLatestFeeSnapshot();
+  const lastSuccessAt = currentStore.getLastSuccessAt();
   const alertThreshold = getCongestionAlertThreshold();
 
   const closeTimes = ledgers
@@ -60,7 +62,7 @@ export function buildHealthResponse(): HealthResponse {
     status: isStale ? "stale" : "ok",
     lastUpdated: lastSuccessAt ? lastSuccessAt.toISOString() : null,
     secondsSinceLastUpdate,
-    horizonUrl: HORIZON_URL,
+    horizonUrl,
     ledgerCloseTime: {
       currentSeconds: currentCloseTime,
       averageSeconds: averageCloseTime,

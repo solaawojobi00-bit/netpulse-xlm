@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 const POLL_INTERVAL_MS = 5000;
 
-export function usePolling<T>(fetcher: () => Promise<T>) {
+export function usePolling<T>(fetcher: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fetcherRef = useRef(fetcher);
@@ -44,7 +44,7 @@ export function usePolling<T>(fetcher: () => Promise<T>) {
       if (timer) clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, deps);
 
   return { data, error };
 }
