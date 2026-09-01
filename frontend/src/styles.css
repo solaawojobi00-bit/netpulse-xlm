@@ -97,6 +97,29 @@ body {
   color: var(--bad-color);
 }
 
+.stat-tile__skeleton {
+  height: 1.8rem;
+  width: 65%;
+  background: var(--border-color);
+  border-radius: 4px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.stat-tile__skeleton--sub {
+  height: 0.8rem;
+  width: 40%;
+  margin-top: 8px;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
