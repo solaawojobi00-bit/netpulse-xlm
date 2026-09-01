@@ -224,4 +224,26 @@ export class NetPulseDatabase {
   }
 }
 
-export const db = new NetPulseDatabase();
+let _dbInstance: NetPulseDatabase | null = null;
+
+export function getDb(): NetPulseDatabase {
+  if (!_dbInstance) {
+    _dbInstance = new NetPulseDatabase();
+  }
+  return _dbInstance;
+}
+
+export const db = {
+  insertLedgers: (...args: Parameters<NetPulseDatabase["insertLedgers"]>) =>
+    getDb().insertLedgers(...args),
+  insertFeeSnapshot: (...args: Parameters<NetPulseDatabase["insertFeeSnapshot"]>) =>
+    getDb().insertFeeSnapshot(...args),
+  pruneOlderThan: (...args: Parameters<NetPulseDatabase["pruneOlderThan"]>) =>
+    getDb().pruneOlderThan(...args),
+  getHistory: (...args: Parameters<NetPulseDatabase["getHistory"]>) =>
+    getDb().getHistory(...args),
+  close: () => {
+    _dbInstance?.close();
+    _dbInstance = null;
+  },
+};
