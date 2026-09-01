@@ -10,12 +10,18 @@ function average(values: number[]): number | null {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
+export function getCongestionAlertThreshold(): number {
+  const envVal = Number(process.env.CONGESTION_ALERT_THRESHOLD);
+  return Number.isFinite(envVal) && envVal > 0 ? envVal : 0.8;
+}
+
 export function congestionBand(
   usage: number | null,
+  highThreshold: number = getCongestionAlertThreshold(),
 ): "low" | "moderate" | "high" | "unknown" {
   if (usage === null) return "unknown";
   if (usage < 0.5) return "low";
-  if (usage < 0.8) return "moderate";
+  if (usage < highThreshold) return "moderate";
   return "high";
 }
 
@@ -23,6 +29,7 @@ export function buildHealthResponse(): HealthResponse {
   const ledgers = store.getLedgers();
   const latestFee = store.getLatestFeeSnapshot();
   const lastSuccessAt = store.getLastSuccessAt();
+  const alertThreshold = getCongestionAlertThreshold();
 
   const closeTimes = ledgers
     .map((l) => l.closeTimeSeconds)
@@ -67,7 +74,8 @@ export function buildHealthResponse(): HealthResponse {
     },
     congestion: {
       ledgerCapacityUsage: latestFee?.ledgerCapacityUsage ?? null,
-      band: congestionBand(latestFee?.ledgerCapacityUsage ?? null),
+      band: congestionBand(latestFee?.ledgerCapacityUsage ?? null, alertThreshold),
+      alertThreshold,
     },
     throughput: {
       operationsPerSecond:

@@ -25,4 +25,10 @@ describe("congestionBand", () => {
     expect(congestionBand(0.801)).toBe("high");
     expect(congestionBand(1.0)).toBe("high");
   });
+
+  it("respects a custom high threshold", () => {
+    expect(congestionBand(0.65, 0.7)).toBe("moderate");
+    expect(congestionBand(0.7, 0.7)).toBe("high");
+    expect(congestionBand(0.75, 0.7)).toBe("high");
+  });
 });

@@ -29,6 +29,7 @@ export interface HealthResponse {
   congestion: {
     ledgerCapacityUsage: number | null;
     band: "low" | "moderate" | "high" | "unknown";
+    alertThreshold?: number;
   };
   throughput: {
     operationsPerSecond: number | null;
