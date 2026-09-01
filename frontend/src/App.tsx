@@ -4,34 +4,14 @@ import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { fetchHealth, fetchRecentLedgers } from "./api";
+import {
+  formatHorizonEndpoint,
+  formatPercent,
+  formatRate,
+  formatSeconds,
+  formatStroops,
+} from "./format";
 import { usePolling } from "./usePolling";
-
-function formatSeconds(value: number | null, digits = 1): string {
-  return value === null ? "—" : `${value.toFixed(digits)}s`;
-}
-
-function formatStroops(value: number | null): string {
-  return value === null ? "—" : `${value.toLocaleString()} stroops`;
-}
-
-function formatPercent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value * 100)}%`;
-}
-
-function formatRate(value: number | null): string {
-  return value === null ? "—" : value.toFixed(1);
-}
-
-function formatHorizonEndpoint(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const host = parsed.host;
-    const network = host.includes("testnet") ? "Testnet" : "Mainnet";
-    return `${network} · ${host}`;
-  } catch {
-    return url;
-  }
-}
 
 const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   low: "good",
