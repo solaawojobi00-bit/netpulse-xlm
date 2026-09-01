@@ -3,6 +3,7 @@ import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
+import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
 import { fetchHealth, fetchRecentLedgers } from "./api";
 import {
   formatHorizonEndpoint,
@@ -77,6 +78,7 @@ export function App() {
       <section className="chart-grid">
         <LedgerCloseTimeChart ledgers={ledgers ?? []} />
         <OperationCountChart ledgers={ledgers ?? []} />
+        <TransactionSuccessChart ledgers={ledgers ?? []} />
         {health && <FeePercentileChart fees={health.fees} />}
       </section>
 
