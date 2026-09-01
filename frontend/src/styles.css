@@ -101,6 +101,8 @@ body {
   border-radius: 8px;
   margin-bottom: 20px;
   font-size: 0.9rem;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .banner--warn {
@@ -229,4 +231,57 @@ body {
 .sync-status--stale .sync-status__indicator {
   background-color: var(--warn-color);
 }
+
+@media (max-width: 480px) {
+  .app {
+    padding: 16px 12px 36px;
+  }
+
+  .app__header h1 {
+    font-size: 1.4rem;
+  }
+
+  .app__header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .app__header-brand {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .chart-card {
+    padding: 12px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .app {
+    padding: 20px 14px 40px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
 

@@ -27,8 +27,8 @@ export function FeePercentileChart({ fees }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="percentile" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
+          <XAxis dataKey="percentile" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} width={45} />
           <Tooltip />
           <Bar dataKey="stroops" fill="var(--accent-color-2)" />
         </BarChart>
