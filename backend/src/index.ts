@@ -3,7 +3,7 @@ import express from "express";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
 import { startPolling, stores } from "./poller.js";
-import type { RecentLedgersResponse } from "./types.js";
+import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 6000);
@@ -26,6 +26,13 @@ export function createApp(): express.Express {
     const network = parseNetwork(req);
     const store = stores[network] ?? stores.mainnet;
     const body: RecentLedgersResponse = { ledgers: store.getLedgers() };
+    res.json(body);
+  });
+
+  app.get("/api/fees/recent", (req, res) => {
+    const network = parseNetwork(req);
+    const store = stores[network] ?? stores.mainnet;
+    const body: RecentFeesResponse = { snapshots: store.getFeeSnapshots() };
     res.json(body);
   });
 

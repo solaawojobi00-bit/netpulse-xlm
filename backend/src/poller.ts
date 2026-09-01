@@ -50,6 +50,10 @@ export class RollingStore {
     return this.feeSnapshots.at(-1) ?? null;
   }
 
+  getFeeSnapshots(): FeeSnapshot[] {
+    return this.feeSnapshots;
+  }
+
   getLastSuccessAt(): Date | null {
     return this.lastSuccessAt;
   }

@@ -10,6 +10,16 @@ export interface LedgerSample {
   maxTxSetSize: number;
 }
 
+export interface FeeSnapshot {
+  fetchedAt: string;
+  lastLedgerBaseFee: number;
+  ledgerCapacityUsage: number;
+  feeChargedP10: number;
+  feeChargedP50: number;
+  feeChargedP90: number;
+  feeChargedP99: number;
+}
+
 export interface HealthResponse {
   status: "ok" | "stale";
   lastUpdated: string | null;
@@ -53,4 +63,17 @@ export async function fetchRecentLedgers(
   if (!res.ok) throw new Error(`GET /api/ledgers/recent failed: ${res.status}`);
   const body = (await res.json()) as { ledgers: LedgerSample[] };
   return body.ledgers;
+}
+
+export interface RecentFeesResponse {
+  snapshots: FeeSnapshot[];
+}
+
+export async function fetchRecentFees(
+  network: Network = "mainnet",
+): Promise<FeeSnapshot[]> {
+  const res = await fetch(`/api/fees/recent?network=${network}`);
+  if (!res.ok) throw new Error(`GET /api/fees/recent failed: ${res.status}`);
+  const body = (await res.json()) as RecentFeesResponse;
+  return body.snapshots;
 }
