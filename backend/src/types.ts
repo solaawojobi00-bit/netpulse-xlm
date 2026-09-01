@@ -51,3 +51,7 @@ export interface HealthResponse {
 export interface RecentLedgersResponse {
   ledgers: LedgerSample[];
 }
+
+export interface RecentFeesResponse {
+  snapshots: FeeSnapshot[];
+}

@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 import { FeePercentileChart } from "./components/FeePercentileChart";
+import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
-import { fetchHealth, fetchRecentLedgers, type Network } from "./api";
+import { fetchHealth, fetchRecentFees, fetchRecentLedgers, type Network } from "./api";
 import {
   formatHorizonEndpoint,
   formatPercent,
@@ -27,9 +28,11 @@ export function App() {
 
   const fetchHealthWithNetwork = useCallback(() => fetchHealth(network), [network]);
   const fetchLedgersWithNetwork = useCallback(() => fetchRecentLedgers(network), [network]);
+  const fetchFeesWithNetwork = useCallback(() => fetchRecentFees(network), [network]);
 
   const { data: health, error: healthError } = usePolling(fetchHealthWithNetwork, [network]);
   const { data: ledgers, error: ledgersError } = usePolling(fetchLedgersWithNetwork, [network]);
+  const { data: feeSnapshots } = usePolling(fetchFeesWithNetwork, [network]);
 
   const isLoading = health === null;
   const isStale = health?.status === "stale";
@@ -116,6 +119,7 @@ export function App() {
         <OperationCountChart ledgers={ledgers ?? []} />
         <TransactionSuccessChart ledgers={ledgers ?? []} />
         {health && <FeePercentileChart fees={health.fees} />}
+        <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
       </section>
 
       <footer className="app__footer">

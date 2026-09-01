@@ -90,4 +90,21 @@ describe("Backend API Routes", () => {
       expect(res.body.ledgers[0].sequence).toBe(12345);
     });
   });
+
+  describe("GET /api/fees/recent", () => {
+    it("returns the expected { snapshots: [...] } shape", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/fees/recent");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("snapshots");
+      expect(Array.isArray(res.body.snapshots)).toBe(true);
+      expect(res.body.snapshots.length).toBeGreaterThan(0);
+      expect(res.body.snapshots[0].feeChargedP50).toBe(100);
+      expect(res.body.snapshots[0].feeChargedP90).toBe(150);
+    });
+  });
 });
