@@ -14,6 +14,7 @@ export interface HealthResponse {
   status: "ok" | "stale";
   lastUpdated: string | null;
   secondsSinceLastUpdate: number | null;
+  horizonUrl?: string;
   ledgerCloseTime: {
     currentSeconds: number | null;
     averageSeconds: number | null;

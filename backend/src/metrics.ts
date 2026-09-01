@@ -3,6 +3,7 @@ import type { HealthResponse } from "./types.js";
 
 const THROUGHPUT_WINDOW = 20;
 const STALE_AFTER_MS = 3 * Number(process.env.POLL_INTERVAL_MS ?? 6000);
+const HORIZON_URL = process.env.HORIZON_URL ?? "https://horizon.stellar.org";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -50,6 +51,7 @@ export function buildHealthResponse(): HealthResponse {
     status: isStale ? "stale" : "ok",
     lastUpdated: lastSuccessAt ? lastSuccessAt.toISOString() : null,
     secondsSinceLastUpdate,
+    horizonUrl: HORIZON_URL,
     ledgerCloseTime: {
       currentSeconds: currentCloseTime,
       averageSeconds: averageCloseTime,
