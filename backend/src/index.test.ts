@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./horizon.js", () => ({
   HORIZON_URLS: {
@@ -39,9 +39,15 @@ const mockFee: FeeSnapshot = {
   feeChargedP99: 500,
 };
 
+import { db } from "./db.js";
+
 describe("Backend API Routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    db.close();
   });
 
   describe("GET /api/health", () => {
@@ -105,6 +111,25 @@ describe("Backend API Routes", () => {
       expect(res.body.snapshots.length).toBeGreaterThan(0);
       expect(res.body.snapshots[0].feeChargedP50).toBe(100);
       expect(res.body.snapshots[0].feeChargedP90).toBe(150);
+    });
+  });
+
+  describe("GET /api/history", () => {
+    it("returns aggregated 24h history points", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?range=24h");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "mainnet");
+      expect(res.body).toHaveProperty("range", "24h");
+      expect(res.body).toHaveProperty("points");
+      expect(Array.isArray(res.body.points)).toBe(true);
+      expect(res.body.points.length).toBeGreaterThan(0);
+      expect(res.body.points[0]).toHaveProperty("closeTimeSeconds");
+      expect(res.body.points[0]).toHaveProperty("congestionUsage");
     });
   });
 });
