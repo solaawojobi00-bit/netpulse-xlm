@@ -10,7 +10,9 @@ function average(values: number[]): number | null {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
-function congestionBand(usage: number | null): "low" | "moderate" | "high" | "unknown" {
+export function congestionBand(
+  usage: number | null,
+): "low" | "moderate" | "high" | "unknown" {
   if (usage === null) return "unknown";
   if (usage < 0.5) return "low";
   if (usage < 0.8) return "moderate";
