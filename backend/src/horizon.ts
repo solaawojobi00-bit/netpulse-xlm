@@ -1,6 +1,13 @@
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
-const HORIZON_URL = process.env.HORIZON_URL ?? "https://horizon.stellar.org";
+export const HORIZON_URLS = {
+  mainnet: process.env.HORIZON_URL ?? "https://horizon.stellar.org",
+  testnet: process.env.HORIZON_TESTNET_URL ?? "https://horizon-testnet.stellar.org",
+} as const;
+
+export type Network = keyof typeof HORIZON_URLS;
+
+const HORIZON_URL = HORIZON_URLS.mainnet;
 
 interface HorizonLedgerRecord {
   sequence: number;
@@ -30,8 +37,8 @@ interface HorizonFeeStatsResponse {
   };
 }
 
-async function horizonFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${HORIZON_URL}${path}`, {
+async function horizonFetch<T>(path: string, horizonUrl: string = HORIZON_URL): Promise<T> {
+  const res = await fetch(`${horizonUrl}${path}`, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
@@ -40,9 +47,13 @@ async function horizonFetch<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function fetchRecentLedgers(limit: number): Promise<LedgerSample[]> {
+export async function fetchRecentLedgers(
+  limit: number,
+  horizonUrl: string = HORIZON_URL,
+): Promise<LedgerSample[]> {
   const data = await horizonFetch<HorizonLedgersResponse>(
     `/ledgers?order=desc&limit=${limit}`,
+    horizonUrl,
   );
   const records = data._embedded.records;
 
@@ -72,8 +83,10 @@ export async function fetchRecentLedgers(limit: number): Promise<LedgerSample[]>
   });
 }
 
-export async function fetchFeeStats(): Promise<FeeSnapshot> {
-  const data = await horizonFetch<HorizonFeeStatsResponse>("/fee_stats");
+export async function fetchFeeStats(
+  horizonUrl: string = HORIZON_URL,
+): Promise<FeeSnapshot> {
+  const data = await horizonFetch<HorizonFeeStatsResponse>("/fee_stats", horizonUrl);
 
   return {
     fetchedAt: new Date().toISOString(),

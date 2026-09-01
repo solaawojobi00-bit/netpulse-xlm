@@ -1,11 +1,16 @@
-import { fetchFeeStats, fetchRecentLedgers } from "./horizon.js";
+import {
+  HORIZON_URLS,
+  fetchFeeStats,
+  fetchRecentLedgers,
+  type Network,
+} from "./horizon.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 const MAX_LEDGERS = 50;
 const MAX_FEE_SNAPSHOTS = 10;
 const LEDGERS_PER_POLL = 20;
 
-class RollingStore {
+export class RollingStore {
   private ledgers: LedgerSample[] = [];
   private feeSnapshots: FeeSnapshot[] = [];
   private lastSuccessAt: Date | null = null;
@@ -54,21 +59,36 @@ class RollingStore {
   }
 }
 
-export const store = new RollingStore();
+export const stores: Record<Network, RollingStore> = {
+  mainnet: new RollingStore(),
+  testnet: new RollingStore(),
+};
 
-async function pollOnce(): Promise<void> {
+export const store = stores.mainnet;
+
+async function pollNetwork(network: Network): Promise<void> {
+  const currentStore = stores[network];
+  const url = HORIZON_URLS[network];
   try {
     const [ledgers, feeStats] = await Promise.all([
-      fetchRecentLedgers(LEDGERS_PER_POLL),
-      fetchFeeStats(),
+      fetchRecentLedgers(LEDGERS_PER_POLL, url),
+      fetchFeeStats(url),
     ]);
-    store.setLedgers(ledgers);
-    store.addFeeSnapshot(feeStats);
-    store.markSuccess();
+    currentStore.setLedgers(ledgers);
+    currentStore.addFeeSnapshot(feeStats);
+    currentStore.markSuccess();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    store.markError(message);
-    console.error(`[poller] Horizon poll failed: ${message}`);
+    currentStore.markError(message);
+    console.error(`[poller][${network}] Horizon poll failed: ${message}`);
+  }
+}
+
+export async function pollOnce(network?: Network): Promise<void> {
+  if (network) {
+    await pollNetwork(network);
+  } else {
+    await Promise.all([pollNetwork("mainnet"), pollNetwork("testnet")]);
   }
 }
 

@@ -1,10 +1,11 @@
+import { useCallback, useState } from "react";
 import { FeePercentileChart } from "./components/FeePercentileChart";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
-import { fetchHealth, fetchRecentLedgers } from "./api";
+import { fetchHealth, fetchRecentLedgers, type Network } from "./api";
 import {
   formatHorizonEndpoint,
   formatPercent,
@@ -22,8 +23,13 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 };
 
 export function App() {
-  const { data: health, error: healthError } = usePolling(fetchHealth);
-  const { data: ledgers, error: ledgersError } = usePolling(fetchRecentLedgers);
+  const [network, setNetwork] = useState<Network>("mainnet");
+
+  const fetchHealthWithNetwork = useCallback(() => fetchHealth(network), [network]);
+  const fetchLedgersWithNetwork = useCallback(() => fetchRecentLedgers(network), [network]);
+
+  const { data: health, error: healthError } = usePolling(fetchHealthWithNetwork, [network]);
+  const { data: ledgers, error: ledgersError } = usePolling(fetchLedgersWithNetwork, [network]);
 
   const isLoading = health === null;
   const isStale = health?.status === "stale";
@@ -32,12 +38,32 @@ export function App() {
     <div className="app">
       <header className="app__header">
         <div className="app__header-top">
-          <h1>NetPulse</h1>
+          <div className="app__header-brand">
+            <h1>NetPulse</h1>
+            <div className="network-selector" role="group" aria-label="Stellar Network">
+              <button
+                type="button"
+                className={`network-selector__btn ${network === "mainnet" ? "network-selector__btn--active" : ""}`}
+                onClick={() => setNetwork("mainnet")}
+              >
+                Mainnet
+              </button>
+              <button
+                type="button"
+                className={`network-selector__btn ${network === "testnet" ? "network-selector__btn--active" : ""}`}
+                onClick={() => setNetwork("testnet")}
+              >
+                Testnet
+              </button>
+            </div>
+          </div>
           {health?.horizonUrl && (
             <span className="network-badge">{formatHorizonEndpoint(health.horizonUrl)}</span>
           )}
         </div>
-        <p className="app__subtitle">Live Stellar mainnet health, via public Horizon</p>
+        <p className="app__subtitle">
+          Live Stellar {network === "testnet" ? "testnet" : "mainnet"} health, via public Horizon
+        </p>
       </header>
 
       {health?.congestion.band === "high" && (
