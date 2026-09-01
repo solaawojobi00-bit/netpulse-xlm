@@ -2,17 +2,20 @@ import {
   HORIZON_URLS,
   fetchFeeStats,
   fetchRecentLedgers,
+  fetchRecentOperations,
   type Network,
 } from "./horizon.js";
-import type { FeeSnapshot, LedgerSample } from "./types.js";
+import type { FeeSnapshot, LedgerSample, SorobanMetricsResponse, SorobanSample } from "./types.js";
 
 const MAX_LEDGERS = 50;
 const MAX_FEE_SNAPSHOTS = 10;
+const MAX_SOROBAN_SAMPLES = 20;
 const LEDGERS_PER_POLL = 20;
 
 export class RollingStore {
   private ledgers: LedgerSample[] = [];
   private feeSnapshots: FeeSnapshot[] = [];
+  private sorobanSamples: SorobanSample[] = [];
   private lastSuccessAt: Date | null = null;
   private lastErrorMessage: string | null = null;
 
@@ -31,6 +34,17 @@ export class RollingStore {
     if (this.feeSnapshots.length > MAX_FEE_SNAPSHOTS) {
       this.feeSnapshots.shift();
     }
+  }
+
+  addSorobanSample(sample: SorobanSample): void {
+    this.sorobanSamples.push(sample);
+    if (this.sorobanSamples.length > MAX_SOROBAN_SAMPLES) {
+      this.sorobanSamples.shift();
+    }
+  }
+
+  getSorobanSamples(): SorobanSample[] {
+    return this.sorobanSamples;
   }
 
   markSuccess(): void {
@@ -109,6 +123,32 @@ async function pollFeeStats(network: Network): Promise<void> {
   }
 }
 
+export async function pollOperations(network: Network): Promise<void> {
+  const currentStore = stores[network];
+  const url = HORIZON_URLS[network];
+  try {
+    const rawOps = await fetchRecentOperations(100, url);
+    const operations = Array.isArray(rawOps) ? rawOps : [];
+    const sorobanOps = operations.filter((op) => op.type === "invoke_host_function");
+    const successfulCount = sorobanOps.filter((op) => op.transaction_successful).length;
+    const failedCount = sorobanOps.length - successfulCount;
+
+    const sample: SorobanSample = {
+      timestamp: new Date().toISOString(),
+      invocationsCount: sorobanOps.length,
+      successfulCount,
+      failedCount,
+    };
+
+    currentStore.addSorobanSample(sample);
+    currentStore.markSuccess();
+    notifyUpdate(network);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[poller][${network}] Operations poll failed: ${message}`);
+  }
+}
+
 async function pollNetwork(network: Network): Promise<void> {
   const currentStore = stores[network];
   const url = HORIZON_URLS[network];
@@ -121,6 +161,7 @@ async function pollNetwork(network: Network): Promise<void> {
     currentStore.addFeeSnapshot(feeStats);
     db.insertLedgers(network, ledgers);
     db.insertFeeSnapshot(network, feeStats);
+    await pollOperations(network);
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
@@ -208,6 +249,35 @@ export async function startStreamForNetwork(
   }
 }
 
+export function buildSorobanResponse(network: Network): SorobanMetricsResponse {
+  const store = stores[network] ?? stores.mainnet;
+  const samples = store.getSorobanSamples();
+  const recentInvocationsTotal = samples.reduce((acc, s) => acc + s.invocationsCount, 0);
+  const successfulInvocationsTotal = samples.reduce((acc, s) => acc + s.successfulCount, 0);
+  const failedInvocationsTotal = samples.reduce((acc, s) => acc + s.failedCount, 0);
+
+  let invocationsPerSecond: number | null = null;
+  if (samples.length >= 2) {
+    const start = new Date(samples[0].timestamp).getTime();
+    const end = new Date(samples[samples.length - 1].timestamp).getTime();
+    const elapsedSeconds = (end - start) / 1000;
+    if (elapsedSeconds > 0) {
+      invocationsPerSecond = Number((recentInvocationsTotal / elapsedSeconds).toFixed(2));
+    }
+  } else if (samples.length === 1) {
+    invocationsPerSecond = 0;
+  }
+
+  return {
+    network,
+    invocationsPerSecond,
+    recentInvocationsTotal,
+    successfulInvocationsTotal,
+    failedInvocationsTotal,
+    samples,
+  };
+}
+
 export function startStreaming(intervalMs: number): void {
   // Prune historical records older than retention policy
   try {
@@ -220,10 +290,16 @@ export function startStreaming(intervalMs: number): void {
   void startStreamForNetwork("mainnet");
   void startStreamForNetwork("testnet");
 
-  // Horizon /fee_stats does not support SSE streaming; poll fee stats periodically
+  // Initial operations poll
+  void pollOperations("mainnet");
+  void pollOperations("testnet");
+
+  // Horizon /fee_stats and /operations do not support SSE streaming; poll periodically
   setInterval(() => {
     void pollFeeStats("mainnet");
     void pollFeeStats("testnet");
+    void pollOperations("mainnet");
+    void pollOperations("testnet");
   }, intervalMs);
 }
 

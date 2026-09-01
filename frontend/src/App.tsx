@@ -4,6 +4,7 @@ import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
 import { HistoryView } from "./components/HistoryView";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
+import { SorobanActivityChart } from "./components/SorobanActivityChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
@@ -33,7 +34,7 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 
 export function App() {
   const [network, setNetwork] = useState<Network>("mainnet");
-  const { health, ledgers, feeSnapshots, error } = useSubscription(network);
+  const { health, ledgers, feeSnapshots, soroban, error } = useSubscription(network);
   const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
 
   useEffect(() => {
@@ -131,6 +132,12 @@ export function App() {
           sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
           loading={isLoading}
         />
+        <StatTile
+          label="Soroban smart contracts"
+          value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
+          sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
+          loading={isLoading}
+        />
       </section>
 
       <section className="chart-grid">
@@ -139,6 +146,7 @@ export function App() {
         <TransactionSuccessChart ledgers={ledgers ?? []} />
         {health && <FeePercentileChart fees={health.fees} />}
         <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
+        <SorobanActivityChart soroban={soroban} />
       </section>
 
       <HistoryView points={historyPoints} range="24h" />

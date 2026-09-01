@@ -273,6 +273,56 @@ body {
   color: var(--text-muted);
 }
 
+.soroban-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.soroban-card__header h3 {
+  margin: 0;
+}
+
+.soroban-card__subtitle {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.soroban-card__subtitle code {
+  background: var(--bg-color);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.soroban-card__stats {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.soroban-stat {
+  font-size: 0.85rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.soroban-stat--muted {
+  color: var(--text-muted);
+}
+
+.soroban-card__empty-note {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 @media (max-width: 480px) {
   .app {
     padding: 16px 12px 36px;

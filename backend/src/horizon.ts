@@ -38,6 +38,21 @@ interface HorizonFeeStatsResponse {
   };
 }
 
+export interface HorizonOperationRecord {
+  id: string;
+  paging_token: string;
+  transaction_successful: boolean;
+  type: string;
+  type_i?: number;
+  created_at: string;
+}
+
+interface HorizonOperationsResponse {
+  _embedded: {
+    records: HorizonOperationRecord[];
+  };
+}
+
 async function horizonFetch<T>(path: string, horizonUrl: string = HORIZON_URL): Promise<T> {
   const res = await fetch(`${horizonUrl}${path}`, {
     headers: { Accept: "application/json" },
@@ -98,6 +113,17 @@ export async function fetchFeeStats(
     feeChargedP90: Number(data.fee_charged.p90),
     feeChargedP99: Number(data.fee_charged.p99),
   };
+}
+
+export async function fetchRecentOperations(
+  limit: number = 100,
+  horizonUrl: string = HORIZON_URL,
+): Promise<HorizonOperationRecord[]> {
+  const data = await horizonFetch<HorizonOperationsResponse>(
+    `/operations?order=desc&limit=${limit}`,
+    horizonUrl,
+  );
+  return data._embedded.records;
 }
 
 export function recordToSample(

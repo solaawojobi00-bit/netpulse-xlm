@@ -55,3 +55,19 @@ export interface RecentLedgersResponse {
 export interface RecentFeesResponse {
   snapshots: FeeSnapshot[];
 }
+
+export interface SorobanSample {
+  timestamp: string;
+  invocationsCount: number;
+  successfulCount: number;
+  failedCount: number;
+}
+
+export interface SorobanMetricsResponse {
+  network: string;
+  invocationsPerSecond: number | null;
+  recentInvocationsTotal: number;
+  successfulInvocationsTotal: number;
+  failedInvocationsTotal: number;
+  samples: SorobanSample[];
+}
