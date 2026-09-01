@@ -70,6 +70,42 @@ export const stores: Record<Network, RollingStore> = {
 
 export const store = stores.mainnet;
 
+type StoreUpdateListener = (network: Network) => void;
+const updateListeners: StoreUpdateListener[] = [];
+
+export function onStoreUpdate(listener: StoreUpdateListener): () => void {
+  updateListeners.push(listener);
+  return () => {
+    const idx = updateListeners.indexOf(listener);
+    if (idx !== -1) updateListeners.splice(idx, 1);
+  };
+}
+
+function notifyUpdate(network: Network): void {
+  for (const listener of updateListeners) {
+    try {
+      listener(network);
+    } catch (err) {
+      console.error(`[poller] Error in store update listener:`, err);
+    }
+  }
+}
+
+async function pollFeeStats(network: Network): Promise<void> {
+  const currentStore = stores[network];
+  const url = HORIZON_URLS[network];
+  try {
+    const feeStats = await fetchFeeStats(url);
+    currentStore.addFeeSnapshot(feeStats);
+    currentStore.markSuccess();
+    notifyUpdate(network);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    currentStore.markError(message);
+    console.error(`[poller][${network}] Fee stats poll failed: ${message}`);
+  }
+}
+
 async function pollNetwork(network: Network): Promise<void> {
   const currentStore = stores[network];
   const url = HORIZON_URLS[network];
@@ -81,6 +117,7 @@ async function pollNetwork(network: Network): Promise<void> {
     currentStore.setLedgers(ledgers);
     currentStore.addFeeSnapshot(feeStats);
     currentStore.markSuccess();
+    notifyUpdate(network);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     currentStore.markError(message);
@@ -96,9 +133,85 @@ export async function pollOnce(network?: Network): Promise<void> {
   }
 }
 
-export function startPolling(intervalMs: number): void {
-  void pollOnce();
+export async function startStreamForNetwork(
+  network: Network,
+  signal?: AbortSignal,
+): Promise<void> {
+  const currentStore = stores[network];
+  const url = HORIZON_URLS[network];
+
+  // 1. Initial warm-up
+  try {
+    const [initialLedgers, initialFees] = await Promise.all([
+      fetchRecentLedgers(LEDGERS_PER_POLL, url),
+      fetchFeeStats(url),
+    ]);
+    currentStore.setLedgers(initialLedgers);
+    currentStore.addFeeSnapshot(initialFees);
+    currentStore.markSuccess();
+    notifyUpdate(network);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    currentStore.markError(message);
+    console.error(`[stream][${network}] Initial warm-up failed: ${message}`);
+  }
+
+  // Determine starting cursor from newest ledger sequence, or fallback to "now"
+  let cursor =
+    currentStore.getLedgers().at(-1)?.sequence?.toString() ?? "now";
+  let backoffDelay = 1000;
+
+  const { connectHorizonLedgerStream, recordToSample } = await import("./horizon.js");
+
+  // Run persistent streaming loop with reconnect-with-backoff
+  while (!signal?.aborted) {
+    try {
+      await connectHorizonLedgerStream(
+        url,
+        cursor,
+        (record) => {
+          if (record.paging_token) {
+            cursor = record.paging_token;
+          } else if (record.sequence) {
+            cursor = String(record.sequence);
+          }
+
+          const existingLedgers = currentStore.getLedgers();
+          const prevClosedAt = existingLedgers.at(-1)?.closedAt;
+          const sample = recordToSample(record, prevClosedAt);
+
+          currentStore.setLedgers([sample]);
+          currentStore.markSuccess();
+          backoffDelay = 1000;
+          notifyUpdate(network);
+        },
+        signal,
+      );
+    } catch (err) {
+      if (signal?.aborted) break;
+      const message = err instanceof Error ? err.message : String(err);
+      currentStore.markError(message);
+      console.warn(
+        `[stream][${network}] Horizon SSE disconnected (${message}). Reconnecting in ${backoffDelay}ms from cursor ${cursor}...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+      backoffDelay = Math.min(30000, backoffDelay * 2);
+    }
+  }
+}
+
+export function startStreaming(intervalMs: number): void {
+  // Start SSE streams for mainnet and testnet
+  void startStreamForNetwork("mainnet");
+  void startStreamForNetwork("testnet");
+
+  // Horizon /fee_stats does not support SSE streaming; poll fee stats periodically
   setInterval(() => {
-    void pollOnce();
+    void pollFeeStats("mainnet");
+    void pollFeeStats("testnet");
   }, intervalMs);
+}
+
+export function startPolling(intervalMs: number): void {
+  startStreaming(intervalMs);
 }

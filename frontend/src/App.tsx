@@ -14,7 +14,7 @@ import {
   formatSeconds,
   formatStroops,
 } from "./format";
-import { usePolling } from "./usePolling";
+import { useSubscription } from "./useSubscription";
 
 const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   low: "good",
@@ -25,14 +25,7 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 
 export function App() {
   const [network, setNetwork] = useState<Network>("mainnet");
-
-  const fetchHealthWithNetwork = useCallback(() => fetchHealth(network), [network]);
-  const fetchLedgersWithNetwork = useCallback(() => fetchRecentLedgers(network), [network]);
-  const fetchFeesWithNetwork = useCallback(() => fetchRecentFees(network), [network]);
-
-  const { data: health, error: healthError } = usePolling(fetchHealthWithNetwork, [network]);
-  const { data: ledgers, error: ledgersError } = usePolling(fetchLedgersWithNetwork, [network]);
-  const { data: feeSnapshots } = usePolling(fetchFeesWithNetwork, [network]);
+  const { health, ledgers, feeSnapshots, error } = useSubscription(network);
 
   const isLoading = health === null;
   const isStale = health?.status === "stale";
@@ -79,9 +72,9 @@ export function App() {
         </div>
       )}
 
-      {(isStale || healthError || ledgersError) && (
+      {(isStale || error) && (
         <div className="banner banner--warn">
-          {healthError || ledgersError
+          {error
             ? "Unable to reach the NetPulse backend. Retrying…"
             : `Data may be stale — backend hasn't refreshed from Horizon in a while.`}
         </div>
