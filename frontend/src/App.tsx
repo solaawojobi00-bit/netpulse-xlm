@@ -40,6 +40,16 @@ export function App() {
         <p className="app__subtitle">Live Stellar mainnet health, via public Horizon</p>
       </header>
 
+      {health?.congestion.band === "high" && (
+        <div className="banner banner--danger">
+          <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
+          {formatPercent(health.congestion.ledgerCapacityUsage)}
+          {health.congestion.alertThreshold !== undefined &&
+            ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
+          . Transactions may experience surge pricing or delayed inclusion.
+        </div>
+      )}
+
       {(isStale || healthError || ledgersError) && (
         <div className="banner banner--warn">
           {healthError || ledgersError
