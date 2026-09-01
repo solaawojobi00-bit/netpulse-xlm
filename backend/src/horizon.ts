@@ -9,7 +9,8 @@ export type Network = keyof typeof HORIZON_URLS;
 
 const HORIZON_URL = HORIZON_URLS.mainnet;
 
-interface HorizonLedgerRecord {
+export interface HorizonLedgerRecord {
+  paging_token?: string;
   sequence: number;
   closed_at: string;
   successful_transaction_count: number;
@@ -97,4 +98,77 @@ export async function fetchFeeStats(
     feeChargedP90: Number(data.fee_charged.p90),
     feeChargedP99: Number(data.fee_charged.p99),
   };
+}
+
+export function recordToSample(
+  record: HorizonLedgerRecord,
+  prevClosedAt?: string | null,
+): LedgerSample {
+  const closeTimeSeconds = prevClosedAt
+    ? (new Date(record.closed_at).getTime() - new Date(prevClosedAt).getTime()) / 1000
+    : null;
+
+  return {
+    sequence: record.sequence,
+    closedAt: record.closed_at,
+    closeTimeSeconds,
+    successfulTransactionCount: record.successful_transaction_count,
+    failedTransactionCount: record.failed_transaction_count,
+    operationCount: record.operation_count,
+    txSetOperationCount: record.tx_set_operation_count,
+    baseFeeInStroops: record.base_fee_in_stroops,
+    maxTxSetSize: record.max_tx_set_size,
+  };
+}
+
+export async function connectHorizonLedgerStream(
+  horizonUrl: string,
+  cursor: string,
+  onLedger: (record: HorizonLedgerRecord) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const url = `${horizonUrl}/ledgers?cursor=${cursor}&order=asc`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`Horizon SSE stream failed: ${url} -> ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      const lines = part.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const raw = line.slice(6).trim();
+          if (raw && raw !== '"hello"') {
+            try {
+              const record = JSON.parse(raw) as HorizonLedgerRecord;
+              if (record && record.sequence) {
+                onLedger(record);
+              }
+            } catch {
+              // Ignore non-JSON or heartbeat comments
+            }
+          }
+        }
+      }
+    }
+  }
 }

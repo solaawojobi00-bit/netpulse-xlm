@@ -44,7 +44,11 @@ export const app = createApp();
 if (process.env.NODE_ENV !== "test") {
   startPolling(POLL_INTERVAL_MS);
 
-  app.listen(PORT, () => {
+  const server = (await import("http")).createServer(app);
+  const { setupWebSocketServer } = await import("./ws.js");
+  setupWebSocketServer(server);
+
+  server.listen(PORT, () => {
     console.log(`NetPulse backend listening on http://localhost:${PORT}`);
   });
 }

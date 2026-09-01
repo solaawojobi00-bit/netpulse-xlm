@@ -22,39 +22,16 @@ GET requests, so there's no credential or account to provision. A future
 issue can add a network selector (mainnet/testnet toggle) for completeness,
 but mainnet is the correct default and only mode for v1.
 
-## Polling vs. Horizon SSE Streaming
+## Horizon SSE Streaming & WebSocket Push Architecture
 
-Horizon supports Server-Sent Events (`Accept: text/event-stream`) on
-several collection endpoints (e.g. `/ledgers`, `/transactions`). SSE was
-considered and rejected for v1 in favor of interval polling:
+As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horizon SSE streaming, periodic fee snapshot polling, and WebSocket push fan-out to clients:
 
-- **Fan-out cost.** SSE is a per-connection stream from Horizon. If this
-  dashboard is opened by many developers, an SSE architecture means either
-  (a) each browser opens its own long-lived stream directly to public
-  Horizon — fragile behind corporate networks/proxies and puts unbounded
-  load on a shared public resource as usage grows — or (b) the backend
-  maintains one SSE connection to Horizon and re-broadcasts to many
-  clients, which is real complexity (reconnect/backoff handling, resuming
-  from a cursor after a drop, backpressure) for zero user-facing benefit
-  at this cadence.
-- **The data doesn't need sub-second latency.** Stellar ledgers close
-  roughly every ~5 seconds. A human looking at a dashboard gains nothing
-  from learning about a new ledger 200ms sooner; a 5-10s poll interval is
-  indistinguishable in practice from a push-based feed for this use case.
-- **Polling is trivially cacheable and rate-limit-friendly.** A single
-  backend poller hitting Horizon on a fixed interval, regardless of how
-  many browser tabs are open, is simple to reason about, simple to test,
-  and easy on Horizon's public rate limits (one poller, not N SSE
-  connections).
-- **Simplicity for Wave contributors.** A `setInterval` + fetch is far more
-  approachable for a contributor picking up a "add a new metric" issue
-  than an SSE reconnect state machine. This matters directly for the
-  "sliceable issues" goal of this project.
-
-Given all of that, **moving to SSE/WebSocket push is an explicit,
-well-scoped Phase 2+ issue** (see backlog) rather than a v1 requirement —
-it's a good example of an isolated, self-contained improvement for a
-contributor to pick up without touching the rest of the system.
+- **Single Backend Ingestion Stream:** The backend maintains a single long-lived Server-Sent Events (`Accept: text/event-stream`) connection to Horizon's `/ledgers` endpoint.
+  - Reconnect-with-exponential-backoff is handled automatically on disconnections, resuming from the latest paging token cursor to prevent gaps or duplicate processing.
+  - Because Horizon does not offer SSE streaming on `/fee_stats`, the backend continues to poll `/fee_stats` on a configurable interval.
+- **WebSocket Broadcast Fan-out:** Instead of multiple browser tabs opening individual SSE connections to public Horizon, the backend terminates the Horizon stream and broadcasts updates over a single WebSocket channel (`/ws`) to all connected frontend clients.
+- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling (`/api/health`, `/api/ledgers/recent`, `/api/fees/recent`) if WebSocket connectivity is blocked or unavailable.
+- **Backward-Compatible REST APIs:** All REST endpoints remain active and continue to serve up-to-date in-memory metrics for external scripts, health probes, and test harnesses.
 
 ## Stack
 
