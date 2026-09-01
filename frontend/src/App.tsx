@@ -22,6 +22,17 @@ function formatRate(value: number | null): string {
   return value === null ? "—" : value.toFixed(1);
 }
 
+function formatHorizonEndpoint(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.host;
+    const network = host.includes("testnet") ? "Testnet" : "Mainnet";
+    return `${network} · ${host}`;
+  } catch {
+    return url;
+  }
+}
+
 const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   low: "good",
   moderate: "warn",
@@ -39,7 +50,12 @@ export function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1>NetPulse</h1>
+        <div className="app__header-top">
+          <h1>NetPulse</h1>
+          {health?.horizonUrl && (
+            <span className="network-badge">{formatHorizonEndpoint(health.horizonUrl)}</span>
+          )}
+        </div>
         <p className="app__subtitle">Live Stellar mainnet health, via public Horizon</p>
       </header>
 

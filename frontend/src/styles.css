@@ -31,9 +31,27 @@ body {
   padding: 24px 16px 48px;
 }
 
+.app__header-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .app__header h1 {
   margin: 0;
   font-size: 1.75rem;
+}
+
+.network-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent-color);
+  background: rgba(77, 163, 255, 0.12);
+  border: 1px solid rgba(77, 163, 255, 0.3);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
 }
 
 .app__subtitle {
