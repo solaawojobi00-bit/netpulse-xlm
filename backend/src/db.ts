@@ -39,7 +39,9 @@ export class NetPulseDatabase {
       }
     }
     this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
+    if (dbPath !== ":memory:") {
+      this.db.pragma("journal_mode = WAL");
+    }
     this.initSchema();
   }
 

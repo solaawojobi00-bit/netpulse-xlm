@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./horizon.js", () => ({
   HORIZON_URLS: {
@@ -39,9 +39,15 @@ const mockFee: FeeSnapshot = {
   feeChargedP99: 500,
 };
 
+import { db } from "./db.js";
+
 describe("Backend API Routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    db.close();
   });
 
   describe("GET /api/health", () => {
