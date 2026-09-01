@@ -107,4 +107,23 @@ describe("Backend API Routes", () => {
       expect(res.body.snapshots[0].feeChargedP90).toBe(150);
     });
   });
+
+  describe("GET /api/history", () => {
+    it("returns aggregated 24h history points", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?range=24h");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "mainnet");
+      expect(res.body).toHaveProperty("range", "24h");
+      expect(res.body).toHaveProperty("points");
+      expect(Array.isArray(res.body.points)).toBe(true);
+      expect(res.body.points.length).toBeGreaterThan(0);
+      expect(res.body.points[0]).toHaveProperty("closeTimeSeconds");
+      expect(res.body.points[0]).toHaveProperty("congestionUsage");
+    });
+  });
 });

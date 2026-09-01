@@ -232,6 +232,47 @@ body {
   background-color: var(--warn-color);
 }
 
+.history-section {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.history-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.history-section__header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.history-section__subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.history-badge {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 9999px;
+}
+
+.chart-card--empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+}
+
 @media (max-width: 480px) {
   .app {
     padding: 16px 12px 36px;

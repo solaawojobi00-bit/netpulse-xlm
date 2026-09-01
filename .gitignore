@@ -33,3 +33,14 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+backend/data/
+

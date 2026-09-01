@@ -1,12 +1,20 @@
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { FeePercentileChart } from "./components/FeePercentileChart";
 import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
+import { HistoryView } from "./components/HistoryView";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
-import { fetchHealth, fetchRecentFees, fetchRecentLedgers, type Network } from "./api";
+import {
+  fetchHealth,
+  fetchHistory,
+  fetchRecentFees,
+  fetchRecentLedgers,
+  type HistoryPoint,
+  type Network,
+} from "./api";
 import {
   formatHorizonEndpoint,
   formatPercent,
@@ -26,6 +34,24 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 export function App() {
   const [network, setNetwork] = useState<Network>("mainnet");
   const { health, ledgers, feeSnapshots, error } = useSubscription(network);
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function loadHistory() {
+      fetchHistory(network, "24h")
+        .then((res) => {
+          if (!cancelled) setHistoryPoints(res.points);
+        })
+        .catch(() => {});
+    }
+    loadHistory();
+    const interval = setInterval(loadHistory, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [network]);
 
   const isLoading = health === null;
   const isStale = health?.status === "stale";
@@ -114,6 +140,8 @@ export function App() {
         {health && <FeePercentileChart fees={health.fees} />}
         <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
       </section>
+
+      <HistoryView points={historyPoints} range="24h" />
 
       <footer className="app__footer">
         {health && (

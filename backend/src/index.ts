@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
+import { db } from "./db.js";
 import { startPolling, stores } from "./poller.js";
 import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
@@ -34,6 +35,13 @@ export function createApp(): express.Express {
     const store = stores[network] ?? stores.mainnet;
     const body: RecentFeesResponse = { snapshots: store.getFeeSnapshots() };
     res.json(body);
+  });
+
+  app.get("/api/history", (req, res) => {
+    const network = parseNetwork(req);
+    const range = req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
+    const history = db.getHistory(network, range);
+    res.json(history);
   });
 
   return app;

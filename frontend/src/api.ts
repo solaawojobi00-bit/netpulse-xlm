@@ -77,3 +77,28 @@ export async function fetchRecentFees(
   const body = (await res.json()) as RecentFeesResponse;
   return body.snapshots;
 }
+
+export interface HistoryPoint {
+  timestamp: string;
+  closeTimeSeconds: number | null;
+  congestionUsage: number | null;
+  operations: number;
+  transactions: number;
+  p50Fee: number | null;
+  p90Fee: number | null;
+}
+
+export interface HistoryResponse {
+  network: string;
+  range: string;
+  points: HistoryPoint[];
+}
+
+export async function fetchHistory(
+  network: Network = "mainnet",
+  range: string = "24h",
+): Promise<HistoryResponse> {
+  const res = await fetch(`/api/history?network=${network}&range=${range}`);
+  if (!res.ok) throw new Error(`GET /api/history failed: ${res.status}`);
+  return (await res.json()) as HistoryResponse;
+}

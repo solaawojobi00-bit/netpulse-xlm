@@ -91,12 +91,15 @@ function notifyUpdate(network: Network): void {
   }
 }
 
+import { db } from "./db.js";
+
 async function pollFeeStats(network: Network): Promise<void> {
   const currentStore = stores[network];
   const url = HORIZON_URLS[network];
   try {
     const feeStats = await fetchFeeStats(url);
     currentStore.addFeeSnapshot(feeStats);
+    db.insertFeeSnapshot(network, feeStats);
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
@@ -116,6 +119,8 @@ async function pollNetwork(network: Network): Promise<void> {
     ]);
     currentStore.setLedgers(ledgers);
     currentStore.addFeeSnapshot(feeStats);
+    db.insertLedgers(network, ledgers);
+    db.insertFeeSnapshot(network, feeStats);
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
@@ -148,6 +153,8 @@ export async function startStreamForNetwork(
     ]);
     currentStore.setLedgers(initialLedgers);
     currentStore.addFeeSnapshot(initialFees);
+    db.insertLedgers(network, initialLedgers);
+    db.insertFeeSnapshot(network, initialFees);
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
@@ -181,6 +188,7 @@ export async function startStreamForNetwork(
           const sample = recordToSample(record, prevClosedAt);
 
           currentStore.setLedgers([sample]);
+          db.insertLedgers(network, [sample]);
           currentStore.markSuccess();
           backoffDelay = 1000;
           notifyUpdate(network);
@@ -201,6 +209,13 @@ export async function startStreamForNetwork(
 }
 
 export function startStreaming(intervalMs: number): void {
+  // Prune historical records older than retention policy
+  try {
+    db.pruneOlderThan();
+  } catch (err) {
+    console.error("[db] Prune failed:", err);
+  }
+
   // Start SSE streams for mainnet and testnet
   void startStreamForNetwork("mainnet");
   void startStreamForNetwork("testnet");
