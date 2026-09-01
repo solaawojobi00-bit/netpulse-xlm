@@ -122,3 +122,27 @@ body {
   color: var(--text-muted);
   font-size: 0.8rem;
 }
+
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-status__indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--good-color);
+  flex-shrink: 0;
+}
+
+.sync-status--stale {
+  color: var(--warn-color);
+}
+
+.sync-status--stale .sync-status__indicator {
+  background-color: var(--warn-color);
+}
+
