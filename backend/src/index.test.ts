@@ -52,6 +52,14 @@ describe("Backend API Routes", () => {
     db.close();
   });
 
+  describe("GET /healthz", () => {
+    it("returns 200 with status: 'ok' regardless of poller state", async () => {
+      const res = await request(app).get("/healthz");
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ status: "ok" });
+    });
+  });
+
   describe("GET /api/health", () => {
     it("returns status: 'stale' when no poll has occurred yet", async () => {
       const res = await request(app).get("/api/health");

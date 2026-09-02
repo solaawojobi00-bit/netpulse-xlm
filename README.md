@@ -45,3 +45,8 @@ Configuration lives in `backend/.env` — see `backend/.env.example` for the
 available settings and their defaults. The backend writes its history
 database to `DATABASE_PATH` (default `./data/netpulse.db`), creating the
 directory on first run.
+
+## Health and Liveness Probes
+
+- `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**
+- `GET /api/health`: Network metrics endpoint returning current network conditions (ledger close times, fee statistics, congestion banding). Because this reflects upstream Horizon reachability and may report `status: "stale"` during external Horizon outages, it should **not** be used as a container liveness probe.
