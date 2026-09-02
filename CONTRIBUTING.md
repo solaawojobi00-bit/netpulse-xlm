@@ -11,7 +11,7 @@ Thank you for your interest in contributing to NetPulse! This guide outlines how
 - **Git**: Configured with your name and email.
 
 NetPulse is organized as two separate npm packages:
-- `backend/`: Fastify HTTP server, Horizon SSE subscriber, SQLite persistence, and WebSocket fan-out.
+- `backend/`: Express HTTP server, Horizon SSE subscriber, SQLite persistence, and WebSocket fan-out.
 - `frontend/`: React + Vite dashboard with Recharts visualizations and WebSocket subscription.
 
 ---
