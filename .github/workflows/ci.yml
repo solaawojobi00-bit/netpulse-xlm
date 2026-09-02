@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -22,6 +23,10 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: npm ci
+
+      - name: Audit dependencies
+        working-directory: backend
+        run: npm audit --audit-level=high
 
       - name: Type-check
         working-directory: backend
@@ -49,6 +54,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Audit dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high --omit=dev
+
       - name: Build and type-check
         working-directory: frontend
         run: npm run build
@@ -56,3 +65,17 @@ jobs:
       - name: Run tests
         working-directory: frontend
         run: npm test
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
