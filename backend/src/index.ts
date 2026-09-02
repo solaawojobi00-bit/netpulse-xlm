@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
+import { historyExportFilename, historyToCsv } from "./csv.js";
 import { db } from "./db.js";
 import { buildSorobanResponse, startPolling, stores } from "./poller.js";
 import { logger } from "./logger.js";
@@ -51,6 +52,38 @@ export function createApp(): express.Express {
     const network = parseNetwork(req);
     const range = req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
     const history = db.getHistory(network, range);
+
+    /*
+     * Export is a representation of the same resource, so it shares this route
+     * and its network/range parsing rather than duplicating them in a second
+     * endpoint that could drift.
+     *
+     * Only an explicit format triggers a download. With no format the response
+     * is byte-identical to before and carries no Content-Disposition, so the
+     * frontend's existing fetch of this endpoint is unaffected.
+     */
+    const format = typeof req.query.format === "string" ? req.query.format : undefined;
+
+    if (format === "csv") {
+      res
+        .type("text/csv; charset=utf-8")
+        .setHeader(
+          "Content-Disposition",
+          `attachment; filename="${historyExportFilename(history, "csv")}"`,
+        );
+      res.send(historyToCsv(history));
+      return;
+    }
+
+    if (format === "json") {
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${historyExportFilename(history, "json")}"`,
+      );
+      res.json(history);
+      return;
+    }
+
     res.json(history);
   });
 
