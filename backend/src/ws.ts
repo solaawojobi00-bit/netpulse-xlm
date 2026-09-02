@@ -60,3 +60,21 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
 
   return wss;
 }
+
+/**
+ * Closes connected clients with a 1001 ("going away") close frame before
+ * closing the server, so browsers see a deliberate shutdown and can back off
+ * rather than treating it as a dropped connection.
+ *
+ * Must run before awaiting the HTTP server's close: WebSocket sockets are
+ * connections on that same server, and leaving them open would keep
+ * `server.close()` pending until the shutdown timeout fired.
+ */
+export function closeWebSocketServer(wss: WebSocketServer): Promise<void> {
+  return new Promise((resolve) => {
+    for (const client of wss.clients) {
+      client.close(1001, "Server shutting down");
+    }
+    wss.close(() => resolve());
+  });
+}
