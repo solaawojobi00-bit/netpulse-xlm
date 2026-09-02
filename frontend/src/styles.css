@@ -1,3 +1,12 @@
+/*
+ * Dark is the default palette. The inline script in index.html stamps
+ * data-theme on <html> before first paint, so the light overrides below apply
+ * without a flash of the wrong theme.
+ *
+ * Tint tokens exist because the accent/status tints were previously hardcoded
+ * rgba() values mixed for a near-black background; they wash out on a light
+ * one, so each theme supplies its own.
+ */
 :root {
   --bg-color: #0b0e14;
   --surface-color: #131722;
@@ -11,7 +20,42 @@
   --warn-color: #f5b942;
   --bad-color: #f5615c;
 
+  --accent-tint-bg: rgba(77, 163, 255, 0.12);
+  --accent-tint-border: rgba(77, 163, 255, 0.3);
+  --warn-tint-bg: rgba(245, 185, 66, 0.12);
+  --warn-tint-border: rgba(245, 185, 66, 0.4);
+  --bad-tint-bg: rgba(245, 97, 92, 0.14);
+  --bad-tint-border: rgba(245, 97, 92, 0.5);
+
   color-scheme: dark;
+}
+
+/*
+ * Light values are darkened relative to their dark-theme counterparts so text
+ * using them clears WCAG AA (4.5:1) against both --bg-color and
+ * --surface-color; the dark hues sit around 4.3:1 on a light background.
+ */
+:root[data-theme="light"] {
+  --bg-color: #f6f7fa;
+  --surface-color: #ffffff;
+  --border-color: #d9dde8;
+  --text-color: #171a21;
+  --text-muted: #5b6376;
+  --grid-color: #e2e6ef;
+  --accent-color: #1a63d2;
+  --accent-color-2: #5b4bd6;
+  --good-color: #137a47;
+  --warn-color: #8a5c00;
+  --bad-color: #c22f28;
+
+  --accent-tint-bg: rgba(26, 99, 210, 0.08);
+  --accent-tint-border: rgba(26, 99, 210, 0.25);
+  --warn-tint-bg: rgba(138, 92, 0, 0.08);
+  --warn-tint-border: rgba(138, 92, 0, 0.28);
+  --bad-tint-bg: rgba(194, 47, 40, 0.07);
+  --bad-tint-border: rgba(194, 47, 40, 0.3);
+
+  color-scheme: light;
 }
 
 * {
@@ -84,11 +128,39 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--accent-color);
-  background: rgba(77, 163, 255, 0.12);
-  border: 1px solid rgba(77, 163, 255, 0.3);
+  background: var(--accent-tint-bg);
+  border: 1px solid var(--accent-tint-border);
   padding: 3px 8px;
   border-radius: 9999px;
   letter-spacing: 0.02em;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--text-color);
+  border-color: var(--text-muted);
+}
+
+.app__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .app__subtitle {
@@ -106,14 +178,14 @@ body {
 }
 
 .banner--warn {
-  background: rgba(245, 185, 66, 0.12);
-  border: 1px solid rgba(245, 185, 66, 0.4);
+  background: var(--warn-tint-bg);
+  border: 1px solid var(--warn-tint-border);
   color: var(--warn-color);
 }
 
 .banner--danger {
-  background: rgba(245, 97, 92, 0.14);
-  border: 1px solid rgba(245, 97, 92, 0.5);
+  background: var(--bad-tint-bg);
+  border: 1px solid var(--bad-tint-border);
   color: var(--bad-color);
 }
 

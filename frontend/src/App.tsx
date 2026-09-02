@@ -7,6 +7,7 @@ import { OperationCountChart } from "./components/OperationCountChart";
 import { SorobanActivityChart } from "./components/SorobanActivityChart";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
 import {
   fetchHealth,
@@ -24,6 +25,7 @@ import {
   formatStroops,
 } from "./format";
 import { useSubscription } from "./useSubscription";
+import { useTheme } from "./useTheme";
 
 const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   low: "good",
@@ -34,6 +36,7 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
 
 export function App() {
   const [network, setNetwork] = useState<Network>("mainnet");
+  const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, error } = useSubscription(network);
   const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
 
@@ -80,9 +83,12 @@ export function App() {
               </button>
             </div>
           </div>
-          {health?.horizonUrl && (
-            <span className="network-badge">{formatHorizonEndpoint(health.horizonUrl)}</span>
-          )}
+          <div className="app__header-actions">
+            {health?.horizonUrl && (
+              <span className="network-badge">{formatHorizonEndpoint(health.horizonUrl)}</span>
+            )}
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          </div>
         </div>
         <p className="app__subtitle">
           Live Stellar {network === "testnet" ? "testnet" : "mainnet"} health, via public Horizon

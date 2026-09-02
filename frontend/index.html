@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NetPulse — Stellar Network Health</title>
+    <script>
+      // Runs before first paint so the correct palette is in place immediately.
+      // Deferring this to React would flash the default dark theme at anyone
+      // whose stored or system preference is light. Keep the storage key in
+      // sync with STORAGE_KEY in src/useTheme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("netpulse:theme");
+        } catch (e) {
+          stored = null;
+        }
+        var theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

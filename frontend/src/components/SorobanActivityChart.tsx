@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { SorobanMetricsResponse } from "../api";
+import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
   soroban: SorobanMetricsResponse | null;
@@ -51,9 +52,14 @@ export function SorobanActivityChart({ soroban }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} minTickGap={25} />
-          <YAxis tick={{ fontSize: 10 }} width={35} allowDecimals={false} />
-          <Tooltip />
+          <XAxis dataKey="name" tick={axisTick} stroke={axisStroke} minTickGap={25} />
+          <YAxis
+            tick={axisTick}
+            stroke={axisStroke}
+            width={35}
+            allowDecimals={false}
+          />
+          <Tooltip {...tooltipProps} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Line
             type="monotone"
