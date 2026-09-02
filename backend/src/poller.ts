@@ -245,7 +245,19 @@ export async function startStreamForNetwork(
         `Horizon SSE disconnected (${message}). Reconnecting in ${backoffDelay}ms from cursor ${cursor}...`,
         { component: "stream", network, backoffDelay, cursor },
       );
-      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+      await new Promise<void>((resolve) => {
+        if (signal?.aborted) return resolve();
+        const onAbort = () => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, backoffDelay);
+        signal?.addEventListener("abort", onAbort);
+      });
       backoffDelay = Math.min(30000, backoffDelay * 2);
     }
   }
