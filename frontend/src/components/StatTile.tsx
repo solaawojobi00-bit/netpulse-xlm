@@ -1,7 +1,7 @@
 interface StatTileProps {
   label: string;
-  value: string;
-  sublabel?: string;
+  value: string | null;
+  sublabel?: string | null;
   tone?: "neutral" | "good" | "warn" | "bad";
   loading?: boolean;
 }
@@ -26,7 +26,7 @@ export function StatTile({
       {loading ? (
         <div className="stat-tile__skeleton" aria-label="Loading..." />
       ) : (
-        <div className="stat-tile__value">{value}</div>
+        <div className="stat-tile__value">{value ?? "—"}</div>
       )}
       {loading ? (
         <div className="stat-tile__skeleton stat-tile__skeleton--sub" aria-hidden="true" />
