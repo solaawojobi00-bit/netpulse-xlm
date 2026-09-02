@@ -69,6 +69,39 @@ logs the failure and exits non-zero, so a stuck connection cannot block exit
 indefinitely. Keep that value below your platform's SIGTERM-to-SIGKILL grace
 period (10s by default for both Docker and systemd).
 
+## Allowed Origins
+
+`CORS_ORIGIN` controls which origins may call the REST API **and** open the
+`/ws` WebSocket. It defaults to `http://localhost:5173`, so the Vite dev
+server connects with no extra configuration.
+
+The browser same-origin policy does not apply to WebSocket handshakes, so
+this check — not CORS — is what stops an arbitrary page from opening `/ws`
+and consuming the snapshot stream. A handshake from an origin that is not
+listed is refused at the upgrade stage with `403 Forbidden` and logged.
+
+**When deploying the frontend to a different origin than the backend**, set
+`CORS_ORIGIN` to that origin, or the browser's WebSocket connection will be
+rejected:
+
+```bash
+# single origin
+CORS_ORIGIN=https://netpulse.example
+
+# several origins (apex plus www, or staging alongside production)
+CORS_ORIGIN=https://netpulse.example,https://www.netpulse.example
+
+# any origin — public read-only deployments only
+CORS_ORIGIN=*
+```
+
+Requests that send **no** `Origin` header — curl, monitoring scripts,
+container health checks — are allowed. A browser always sends `Origin` on a
+WebSocket handshake, so the cross-site connection this guards against cannot
+occur without one, while anything outside a browser can set the header to
+whatever it likes. Blocking origin-less clients would therefore break
+legitimate tooling without stopping an attacker.
+
 ## Health and Liveness Probes
 
 - `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**
