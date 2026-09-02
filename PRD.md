@@ -61,26 +61,50 @@ window:
 
 ## Out of Scope for v1
 
+This section records what v1 was deliberately scoped *out* of, and why.
+Several of these have since been picked up as Phase 2+ work; those are
+annotated inline rather than deleted, so the original scoping rationale
+stays legible alongside what actually shipped.
+
 - **Historical/long-range analytics** (hourly/daily/weekly aggregates,
   data persisted beyond an in-memory rolling window). v1 is a live
   snapshot tool, not a time-series database product.
+  *Partly shipped since v1 (#15):* history is persisted to SQLite with
+  7-day retention and surfaced as a 24h trend view in 5-minute buckets.
+  Longer-range daily/weekly aggregates remain out of scope.
 - **Per-account or per-transaction lookup/search** — this is not a block
   explorer. No address search, no transaction detail pages.
+  *Still out of scope.*
 - **Alerting/notifications** (email, webhook, Discord/Slack pings on
   thresholds). Flagged as a Phase 2+ issue.
+  *Still open — tracked as a Phase 2+ issue.* v1's
+  `CONGESTION_ALERT_THRESHOLD` drives an in-dashboard banner only; no
+  outbound notification is sent.
 - **Authentication, user accounts, saved preferences, multi-tenant
   dashboards.**
+  *Still out of scope.*
 - **Testnet or Futurenet support.** Mainnet only for v1 (see
   ARCHITECTURE.md); multi-network toggle is a good later issue.
+  *Partly shipped since v1 (#10):* mainnet/testnet are both polled and
+  selectable from the header. Futurenet remains unsupported.
 - **Soroban-specific contract-level metrics** (e.g. per-contract
   invocation counts, Wasm execution cost trends). Valuable follow-up but
   distinct data source/effort from core ledger health.
+  *Partly shipped since v1 (#16):* `invoke_host_function` invocation
+  rate, totals, and success/failure split are tracked and charted.
+  Per-contract breakdowns and Wasm execution cost trends remain out of
+  scope.
 - **Mobile-optimized layout / PWA install.** Responsive-enough for a
   secondary monitor or browser tab is sufficient for v1; dedicated mobile
   polish is a later issue.
+  *Partly shipped since v1 (#12):* responsive layouts are polished at the
+  375px and 768px breakpoints. PWA install remains out of scope.
 - **WebSocket/SSE push updates.** v1 uses backend polling + frontend
   polling (see ARCHITECTURE.md); moving to push-based updates is
   explicitly deferred to a Phase 2+ issue.
+  *Shipped since v1 (#14):* the backend holds a persistent Horizon SSE
+  connection and pushes snapshots to clients over WebSocket. The REST
+  endpoints remain available as a fallback.
 
 ## Success Criteria for Phase 1
 
