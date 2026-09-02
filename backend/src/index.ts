@@ -18,6 +18,10 @@ export function createApp(): express.Express {
   const app = express();
   app.use(cors({ origin: CORS_ORIGIN }));
 
+  app.get("/healthz", (_req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
+
   app.get("/api/health", (req, res) => {
     const network = parseNetwork(req);
     res.json(buildHealthResponse(network));
