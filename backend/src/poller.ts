@@ -292,7 +292,16 @@ export function buildSorobanResponse(network: Network): SorobanMetricsResponse {
   };
 }
 
-export function startStreaming(intervalMs: number): void {
+export interface StreamingHandle {
+  /**
+   * Clears the poll interval and aborts the SSE loops, resolving once those
+   * loops have actually exited. Shutdown awaits this before closing the
+   * database, since the stream callbacks write to it.
+   */
+  stop: () => Promise<void>;
+}
+
+export function startStreaming(intervalMs: number): StreamingHandle {
   // Prune historical records older than retention policy
   try {
     db.pruneOlderThan();
@@ -300,23 +309,40 @@ export function startStreaming(intervalMs: number): void {
     logger.error("Prune failed", { component: "db", err });
   }
 
-  // Start SSE streams for mainnet and testnet
-  void startStreamForNetwork("mainnet");
-  void startStreamForNetwork("testnet");
+  /*
+   * startStreamForNetwork already accepted an AbortSignal but nothing ever
+   * supplied one, so the SSE loops ran until the process died. Keeping the
+   * controller and the returned promises here is what makes them stoppable.
+   */
+  const controller = new AbortController();
+  const streams = [
+    startStreamForNetwork("mainnet", controller.signal),
+    startStreamForNetwork("testnet", controller.signal),
+  ];
 
   // Initial operations poll
   void pollOperations("mainnet");
   void pollOperations("testnet");
 
   // Horizon /fee_stats and /operations do not support SSE streaming; poll periodically
-  setInterval(() => {
+  const interval = setInterval(() => {
     void pollFeeStats("mainnet");
     void pollFeeStats("testnet");
     void pollOperations("mainnet");
     void pollOperations("testnet");
   }, intervalMs);
+
+  return {
+    async stop() {
+      clearInterval(interval);
+      controller.abort();
+      // allSettled: a stream rejecting on the way out must not stop the rest
+      // of shutdown, and the loops swallow their own errors anyway.
+      await Promise.allSettled(streams);
+    },
+  };
 }
 
-export function startPolling(intervalMs: number): void {
-  startStreaming(intervalMs);
+export function startPolling(intervalMs: number): StreamingHandle {
+  return startStreaming(intervalMs);
 }

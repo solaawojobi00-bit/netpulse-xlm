@@ -46,6 +46,29 @@ available settings and their defaults (including `LOG_LEVEL`, defaulting to `inf
 The backend writes its history database to `DATABASE_PATH` (default `./data/netpulse.db`),
 creating the directory on first run.
 
+## Graceful Shutdown
+
+`SIGTERM` and `SIGINT` both start the same shutdown sequence, so the backend
+drains cleanly under Docker, systemd, or any container platform that signals
+before killing:
+
+1. Stop accepting new HTTP connections.
+2. Close WebSocket clients with a `1001` ("going away") close frame.
+3. Drop idle keep-alive sockets and wait for in-flight requests to finish.
+4. Clear the Horizon poll interval and abort the SSE stream loops.
+5. Close the SQLite connection **last**, once nothing can still write to it.
+
+The database is closed last on purpose: the SSE callbacks write ledgers as
+they arrive, so closing earlier risks a write against a closed handle. WAL-mode
+SQLite closed uncleanly on every restart is the failure this is most meant to
+avoid.
+
+A second signal arriving mid-shutdown is ignored rather than starting cleanup
+again. If cleanup exceeds `SHUTDOWN_TIMEOUT_MS` (default 8000) the process
+logs the failure and exits non-zero, so a stuck connection cannot block exit
+indefinitely. Keep that value below your platform's SIGTERM-to-SIGKILL grace
+period (10s by default for both Docker and systemd).
+
 ## Health and Liveness Probes
 
 - `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**

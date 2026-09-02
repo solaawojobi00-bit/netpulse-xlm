@@ -5,10 +5,14 @@ import { buildHealthResponse } from "./metrics.js";
 import { db } from "./db.js";
 import { buildSorobanResponse, startPolling, stores } from "./poller.js";
 import { logger } from "./logger.js";
+import { DEFAULT_SHUTDOWN_TIMEOUT_MS, createShutdownRunner } from "./shutdown.js";
 import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? 6000);
+const SHUTDOWN_TIMEOUT_MS = Number(
+  process.env.SHUTDOWN_TIMEOUT_MS ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
+);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
 
 function parseNetwork(req: express.Request): Network {
@@ -59,12 +63,14 @@ export function createApp(): express.Express {
 
 export const app = createApp();
 
+// Signal handlers are registered only on this path, so the test path in this
+// file neither starts a server nor leaks listeners between test files.
 if (process.env.NODE_ENV !== "test") {
-  startPolling(POLL_INTERVAL_MS);
+  const streaming = startPolling(POLL_INTERVAL_MS);
 
   const server = (await import("http")).createServer(app);
-  const { setupWebSocketServer } = await import("./ws.js");
-  setupWebSocketServer(server);
+  const { closeWebSocketServer, setupWebSocketServer } = await import("./ws.js");
+  const wss = setupWebSocketServer(server);
 
   server.listen(PORT, () => {
     logger.info(`NetPulse backend listening on http://localhost:${PORT}`, {
@@ -72,4 +78,36 @@ if (process.env.NODE_ENV !== "test") {
       port: PORT,
     });
   });
+
+  const shutdown = createShutdownRunner({
+    timeoutMs: SHUTDOWN_TIMEOUT_MS,
+    run: async () => {
+      /*
+       * Ordering matters more than any individual step here:
+       *
+       * 1. Stop accepting new connections immediately, but only *await* the
+       *    close later — in-flight requests still need to finish.
+       * 2. Close WebSockets next. They are connections on this same server,
+       *    so the close in step 3 cannot complete while they are open.
+       * 3. Drop idle keep-alive sockets, which hold the server open despite
+       *    having no request in flight, then wait for the drain.
+       * 4. Stop the poll interval and the SSE loops.
+       * 5. Close the database last, once nothing is left that might write.
+       */
+      const httpClosed = new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+
+      await closeWebSocketServer(wss);
+      server.closeIdleConnections();
+      await httpClosed;
+
+      await streaming.stop();
+
+      db.close();
+    },
+  });
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
