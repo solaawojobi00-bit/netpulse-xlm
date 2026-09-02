@@ -19,7 +19,8 @@ streaming with WebSocket push to the browser, mainnet/testnet selection,
 persistent history with a 24h trend view, Soroban contract activity
 metrics, and additional fee and transaction charts.
 
-See the open issues for the current backlog.
+See the open issues for the current backlog. See [CONTRIBUTING.md](./CONTRIBUTING.md)
+for local setup, branch conventions, running checks, and how to claim an issue.
 
 ## Running locally
 
