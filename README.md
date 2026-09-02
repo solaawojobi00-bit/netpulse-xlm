@@ -102,6 +102,37 @@ occur without one, while anything outside a browser can set the header to
 whatever it likes. Blocking origin-less clients would therefore break
 legitimate tooling without stopping an attacker.
 
+## History Export
+
+`GET /api/history` serves aggregated 5-minute buckets, and accepts an optional
+`format` for downloading the same data:
+
+| Request | Response |
+|---|---|
+| `/api/history` | `application/json`, rendered inline (what the dashboard fetches) |
+| `/api/history?format=csv` | `text/csv` as a file download |
+| `/api/history?format=json` | the same JSON body, as a file download |
+
+`format` is a representation of the existing resource rather than a separate
+endpoint, so `network` and `range` apply unchanged:
+
+```bash
+curl -OJ "http://localhost:4000/api/history?network=testnet&range=6h&format=csv"
+```
+
+Downloads are named `netpulse-history-<network>-<range>.csv` (or `.json`).
+Omitting `format`, or passing one that is not recognised, returns the original
+inline JSON with no `Content-Disposition`.
+
+CSV has one row per bucket. `network` and `range` are repeated on every row so
+an exported file makes sense without the request that produced it, and empty
+fields mean no data for that bucket rather than zero:
+
+```
+network,range,timestamp,closeTimeSeconds,congestionUsage,operations,transactions,p50Fee,p90Fee
+mainnet,24h,2026-09-02T22:10:00.000Z,5.58,0.6683,11371,6702,100,17734
+```
+
 ## Health and Liveness Probes
 
 - `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**

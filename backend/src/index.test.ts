@@ -141,6 +141,84 @@ describe("Backend API Routes", () => {
       expect(res.body.points[0]).toHaveProperty("closeTimeSeconds");
       expect(res.body.points[0]).toHaveProperty("congestionUsage");
     });
+
+    it("serves the unchanged JSON body with no attachment header when no format is given", async () => {
+      // The frontend fetches this endpoint without a format; it must not
+      // start downloading as a file.
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?range=24h");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-disposition"]).toBeUndefined();
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+    });
+
+    it("exports CSV with a header row and one row per bucket", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?range=24h&format=csv");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/text\/csv/);
+      expect(res.headers["content-disposition"]).toBe(
+        'attachment; filename="netpulse-history-mainnet-24h.csv"',
+      );
+
+      const rows = res.text.trimEnd().split("\r\n");
+      expect(rows[0]).toBe(
+        "network,range,timestamp,closeTimeSeconds,congestionUsage,operations,transactions,p50Fee,p90Fee",
+      );
+      expect(rows.length).toBeGreaterThan(1);
+      expect(rows[1].startsWith("mainnet,24h,")).toBe(true);
+    });
+
+    it("exports JSON as an attachment while keeping the existing body shape", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?range=24h&format=json");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-disposition"]).toBe(
+        'attachment; filename="netpulse-history-mainnet-24h.json"',
+      );
+      expect(res.body).toHaveProperty("network", "mainnet");
+      expect(res.body).toHaveProperty("range", "24h");
+      expect(Array.isArray(res.body.points)).toBe(true);
+    });
+
+    it("still respects the network and range params when exporting", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      await pollOnce("testnet");
+
+      const res = await request(app).get("/api/history?network=testnet&range=6h&format=csv");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-disposition"]).toBe(
+        'attachment; filename="netpulse-history-testnet-6h.csv"',
+      );
+      const rows = res.text.trimEnd().split("\r\n");
+      expect(rows[1].startsWith("testnet,6h,")).toBe(true);
+    });
+
+    it("ignores an unrecognised format and serves the default JSON body", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/history?format=xml");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-disposition"]).toBeUndefined();
+      expect(res.body).toHaveProperty("points");
+    });
   });
 
   describe("GET /api/soroban", () => {
