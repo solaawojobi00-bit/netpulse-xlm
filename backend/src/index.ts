@@ -4,6 +4,7 @@ import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
 import { db } from "./db.js";
 import { buildSorobanResponse, startPolling, stores } from "./poller.js";
+import { logger } from "./logger.js";
 import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -66,6 +67,9 @@ if (process.env.NODE_ENV !== "test") {
   setupWebSocketServer(server);
 
   server.listen(PORT, () => {
-    console.log(`NetPulse backend listening on http://localhost:${PORT}`);
+    logger.info(`NetPulse backend listening on http://localhost:${PORT}`, {
+      component: "server",
+      port: PORT,
+    });
   });
 }
