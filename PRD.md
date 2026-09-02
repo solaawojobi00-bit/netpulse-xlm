@@ -17,7 +17,7 @@ answer: **"How healthy is the Stellar network right now?"**
 - **Stellar/Soroban application developers** who want a quick health check
   during local development, debugging, or before submitting a
   fee-bump/time-sensitive transaction.
-- **Stellar Wave contributors** evaluating or extending ecosystem
+- **Open-source contributors** evaluating or extending ecosystem
   infrastructure tooling.
 - **Node operators and ecosystem tooling maintainers** who want a simple
   reference implementation of "how to read network health from Horizon"
@@ -114,7 +114,7 @@ stays legible alongside what actually shipped.
 - Backend survives a Horizon request failure (timeout, 5xx, rate limit)
   without crashing, and the frontend communicates a stale/degraded state
   rather than showing wrong data silently.
-- Code and structure are approachable enough that a Wave contributor with
+- Code and structure are approachable enough that a contributor with
   general JS/TS experience (not necessarily Stellar experience) can pick
   up a "add a new metric" or "add a new chart" issue without needing a
   guided walkthrough.
