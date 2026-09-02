@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import type { HistoryPoint } from "../api";
 import { formatPercent } from "../format";
+import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
   points: HistoryPoint[];
@@ -66,9 +67,9 @@ export function HistoryView({ points, range = "24h" }: Props) {
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-              <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={30} />
-              <YAxis tick={{ fontSize: 10 }} width={35} />
-              <Tooltip />
+              <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
+              <YAxis tick={axisTick} stroke={axisStroke} width={35} />
+              <Tooltip {...tooltipProps} />
               <Line
                 type="monotone"
                 dataKey="closeTimeSeconds"
@@ -86,13 +87,17 @@ export function HistoryView({ points, range = "24h" }: Props) {
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-              <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={30} />
+              <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={axisTick}
+                stroke={axisStroke}
                 width={35}
                 tickFormatter={(v) => `${v}%`}
               />
-              <Tooltip formatter={(v: any) => [`${v}%`, "Avg congestion"]} />
+              <Tooltip
+                {...tooltipProps}
+                formatter={(v: any) => [`${v}%`, "Avg congestion"]}
+              />
               <Line
                 type="monotone"
                 dataKey="congestionPercent"

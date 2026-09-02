@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { FeeSnapshot } from "../api";
+import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
   snapshots: FeeSnapshot[];
@@ -37,9 +38,9 @@ export function FeeSpreadTrendChart({ snapshots }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={25} />
-          <YAxis tick={{ fontSize: 10 }} width={45} />
-          <Tooltip />
+          <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={25} />
+          <YAxis tick={axisTick} stroke={axisStroke} width={45} />
+          <Tooltip {...tooltipProps} />
           <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "4px" }} />
           <Line
             type="monotone"

@@ -8,6 +8,7 @@ import {
   YAxis,
 } from "recharts";
 import type { HealthResponse } from "../api";
+import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
 
 interface Props {
   fees: HealthResponse["fees"];
@@ -27,9 +28,9 @@ export function FeePercentileChart({ fees }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="percentile" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} width={45} />
-          <Tooltip />
+          <XAxis dataKey="percentile" tick={axisTick} stroke={axisStroke} />
+          <YAxis tick={axisTick} stroke={axisStroke} width={45} />
+          <Tooltip {...tooltipProps} cursor={barTooltipCursor} />
           <Bar dataKey="stroops" fill="var(--accent-color-2)" />
         </BarChart>
       </ResponsiveContainer>

@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { LedgerSample } from "../api";
+import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
 
 interface Props {
   ledgers: LedgerSample[];
@@ -35,9 +36,14 @@ export function TransactionSuccessChart({ ledgers }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="sequence" tick={{ fontSize: 10 }} minTickGap={25} />
-          <YAxis tick={{ fontSize: 10 }} width={35} />
-          <Tooltip />
+          <XAxis
+            dataKey="sequence"
+            tick={axisTick}
+            stroke={axisStroke}
+            minTickGap={25}
+          />
+          <YAxis tick={axisTick} stroke={axisStroke} width={35} />
+          <Tooltip {...tooltipProps} cursor={barTooltipCursor} />
           <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "4px" }} />
           <Bar dataKey="successful" stackId="txs" fill="var(--good-color)" name="Successful" />
           <Bar dataKey="failed" stackId="txs" fill="var(--bad-color)" name="Failed" />
