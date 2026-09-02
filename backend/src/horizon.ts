@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { logger } from "./logger.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 export const HORIZON_URLS = {
@@ -9,66 +11,100 @@ export type Network = keyof typeof HORIZON_URLS;
 
 const HORIZON_URL = HORIZON_URLS.mainnet;
 
-export interface HorizonLedgerRecord {
-  paging_token?: string;
-  sequence: number;
-  closed_at: string;
-  successful_transaction_count: number;
-  failed_transaction_count: number;
-  operation_count: number;
-  tx_set_operation_count: number;
-  base_fee_in_stroops: number;
-  max_tx_set_size: number;
-}
+export const numericCoerce = z
+  .union([z.string(), z.number()])
+  .refine(
+    (v) => {
+      if (typeof v === "number") return !Number.isNaN(v);
+      return typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v));
+    },
+    { message: "Expected numeric string or number" },
+  )
+  .transform((v) => Number(v));
 
-interface HorizonLedgersResponse {
-  _embedded: {
-    records: HorizonLedgerRecord[];
-  };
-}
+export const HorizonLedgerRecordSchema = z.object({
+  paging_token: z.string().optional(),
+  sequence: z.number(),
+  closed_at: z.string(),
+  successful_transaction_count: z.number(),
+  failed_transaction_count: z.number(),
+  operation_count: z.number(),
+  tx_set_operation_count: z.number(),
+  base_fee_in_stroops: z.number(),
+  max_tx_set_size: z.number(),
+});
 
-interface HorizonFeeStatsResponse {
-  last_ledger_base_fee: string;
-  ledger_capacity_usage: string;
-  fee_charged: {
-    p10: string;
-    p50: string;
-    p90: string;
-    p99: string;
-  };
-}
+export type HorizonLedgerRecord = z.infer<typeof HorizonLedgerRecordSchema>;
 
-export interface HorizonOperationRecord {
-  id: string;
-  paging_token: string;
-  transaction_successful: boolean;
-  type: string;
-  type_i?: number;
-  created_at: string;
-}
+export const HorizonLedgersResponseSchema = z.object({
+  _embedded: z.object({
+    records: z.array(HorizonLedgerRecordSchema),
+  }),
+});
 
-interface HorizonOperationsResponse {
-  _embedded: {
-    records: HorizonOperationRecord[];
-  };
-}
+export type HorizonLedgersResponse = z.infer<typeof HorizonLedgersResponseSchema>;
 
-async function horizonFetch<T>(path: string, horizonUrl: string = HORIZON_URL): Promise<T> {
+export const HorizonFeeStatsResponseSchema = z.object({
+  last_ledger_base_fee: numericCoerce,
+  ledger_capacity_usage: numericCoerce,
+  fee_charged: z.object({
+    p10: numericCoerce,
+    p50: numericCoerce,
+    p90: numericCoerce,
+    p99: numericCoerce,
+  }),
+});
+
+export type HorizonFeeStatsResponse = z.infer<typeof HorizonFeeStatsResponseSchema>;
+
+export const HorizonOperationRecordSchema = z.object({
+  id: z.string(),
+  paging_token: z.string(),
+  transaction_successful: z.boolean(),
+  type: z.string(),
+  type_i: z.number().optional(),
+  created_at: z.string(),
+});
+
+export type HorizonOperationRecord = z.infer<typeof HorizonOperationRecordSchema>;
+
+export const HorizonOperationsResponseSchema = z.object({
+  _embedded: z.object({
+    records: z.array(HorizonOperationRecordSchema),
+  }),
+});
+
+export type HorizonOperationsResponse = z.infer<typeof HorizonOperationsResponseSchema>;
+
+async function horizonFetch<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  horizonUrl: string = HORIZON_URL,
+): Promise<T> {
   const res = await fetch(`${horizonUrl}${path}`, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
     throw new Error(`Horizon request failed: ${path} -> ${res.status}`);
   }
-  return (await res.json()) as T;
+  const json = await res.json();
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    const issueDetails = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
+      .join("; ");
+    throw new Error(`Horizon schema validation failed for ${path}: ${issueDetails}`);
+  }
+  return parsed.data;
 }
 
 export async function fetchRecentLedgers(
   limit: number,
   horizonUrl: string = HORIZON_URL,
 ): Promise<LedgerSample[]> {
-  const data = await horizonFetch<HorizonLedgersResponse>(
+  const data = await horizonFetch(
     `/ledgers?order=desc&limit=${limit}`,
+    HorizonLedgersResponseSchema,
     horizonUrl,
   );
   const records = data._embedded.records;
@@ -102,16 +138,20 @@ export async function fetchRecentLedgers(
 export async function fetchFeeStats(
   horizonUrl: string = HORIZON_URL,
 ): Promise<FeeSnapshot> {
-  const data = await horizonFetch<HorizonFeeStatsResponse>("/fee_stats", horizonUrl);
+  const data = await horizonFetch(
+    "/fee_stats",
+    HorizonFeeStatsResponseSchema,
+    horizonUrl,
+  );
 
   return {
     fetchedAt: new Date().toISOString(),
-    lastLedgerBaseFee: Number(data.last_ledger_base_fee),
-    ledgerCapacityUsage: Number(data.ledger_capacity_usage),
-    feeChargedP10: Number(data.fee_charged.p10),
-    feeChargedP50: Number(data.fee_charged.p50),
-    feeChargedP90: Number(data.fee_charged.p90),
-    feeChargedP99: Number(data.fee_charged.p99),
+    lastLedgerBaseFee: data.last_ledger_base_fee,
+    ledgerCapacityUsage: data.ledger_capacity_usage,
+    feeChargedP10: data.fee_charged.p10,
+    feeChargedP50: data.fee_charged.p50,
+    feeChargedP90: data.fee_charged.p90,
+    feeChargedP99: data.fee_charged.p99,
   };
 }
 
@@ -119,8 +159,9 @@ export async function fetchRecentOperations(
   limit: number = 100,
   horizonUrl: string = HORIZON_URL,
 ): Promise<HorizonOperationRecord[]> {
-  const data = await horizonFetch<HorizonOperationsResponse>(
+  const data = await horizonFetch(
     `/operations?order=desc&limit=${limit}`,
+    HorizonOperationsResponseSchema,
     horizonUrl,
   );
   return data._embedded.records;
@@ -185,9 +226,17 @@ export async function connectHorizonLedgerStream(
           const raw = line.slice(6).trim();
           if (raw && raw !== '"hello"') {
             try {
-              const record = JSON.parse(raw) as HorizonLedgerRecord;
-              if (record && record.sequence) {
-                onLedger(record);
+              const json = JSON.parse(raw);
+              const parsed = HorizonLedgerRecordSchema.safeParse(json);
+              if (parsed.success) {
+                onLedger(parsed.data);
+              } else {
+                const issueDetails = parsed.error.issues
+                  .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
+                  .join("; ");
+                logger.warn(`Malformed SSE ledger record skipped: ${issueDetails}`, {
+                  component: "stream",
+                });
               }
             } catch {
               // Ignore non-JSON or heartbeat comments
