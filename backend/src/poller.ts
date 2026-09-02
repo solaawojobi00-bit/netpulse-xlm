@@ -5,6 +5,7 @@ import {
   fetchRecentOperations,
   type Network,
 } from "./horizon.js";
+import { logger } from "./logger.js";
 import type { FeeSnapshot, LedgerSample, SorobanMetricsResponse, SorobanSample } from "./types.js";
 
 const MAX_LEDGERS = 50;
@@ -100,7 +101,7 @@ function notifyUpdate(network: Network): void {
     try {
       listener(network);
     } catch (err) {
-      console.error(`[poller] Error in store update listener:`, err);
+      logger.error("Error in store update listener", { component: "poller", err });
     }
   }
 }
@@ -119,7 +120,7 @@ async function pollFeeStats(network: Network): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     currentStore.markError(message);
-    console.error(`[poller][${network}] Fee stats poll failed: ${message}`);
+    logger.warn("Fee stats poll failed", { component: "poller", network, err });
   }
 }
 
@@ -145,7 +146,7 @@ export async function pollOperations(network: Network): Promise<void> {
     notifyUpdate(network);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[poller][${network}] Operations poll failed: ${message}`);
+    logger.warn("Operations poll failed", { component: "poller", network, err });
   }
 }
 
@@ -167,7 +168,7 @@ async function pollNetwork(network: Network): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     currentStore.markError(message);
-    console.error(`[poller][${network}] Horizon poll failed: ${message}`);
+    logger.warn("Horizon poll failed", { component: "poller", network, err });
   }
 }
 
@@ -201,7 +202,7 @@ export async function startStreamForNetwork(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     currentStore.markError(message);
-    console.error(`[stream][${network}] Initial warm-up failed: ${message}`);
+    logger.warn("Initial warm-up failed", { component: "stream", network, err });
   }
 
   // Determine starting cursor from newest ledger sequence, or fallback to "now"
@@ -240,8 +241,9 @@ export async function startStreamForNetwork(
       if (signal?.aborted) break;
       const message = err instanceof Error ? err.message : String(err);
       currentStore.markError(message);
-      console.warn(
-        `[stream][${network}] Horizon SSE disconnected (${message}). Reconnecting in ${backoffDelay}ms from cursor ${cursor}...`,
+      logger.info(
+        `Horizon SSE disconnected (${message}). Reconnecting in ${backoffDelay}ms from cursor ${cursor}...`,
+        { component: "stream", network, backoffDelay, cursor },
       );
       await new Promise((resolve) => setTimeout(resolve, backoffDelay));
       backoffDelay = Math.min(30000, backoffDelay * 2);
@@ -283,7 +285,7 @@ export function startStreaming(intervalMs: number): void {
   try {
     db.pruneOlderThan();
   } catch (err) {
-    console.error("[db] Prune failed:", err);
+    logger.error("Prune failed", { component: "db", err });
   }
 
   // Start SSE streams for mainnet and testnet

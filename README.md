@@ -42,9 +42,9 @@ WebSocket to the backend on port 4000. Open the URL Vite prints (default
 `http://localhost:5173`).
 
 Configuration lives in `backend/.env` — see `backend/.env.example` for the
-available settings and their defaults. The backend writes its history
-database to `DATABASE_PATH` (default `./data/netpulse.db`), creating the
-directory on first run.
+available settings and their defaults (including `LOG_LEVEL`, defaulting to `info`).
+The backend writes its history database to `DATABASE_PATH` (default `./data/netpulse.db`),
+creating the directory on first run.
 
 ## Health and Liveness Probes
 
