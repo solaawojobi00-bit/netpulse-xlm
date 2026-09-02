@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FeePercentileChart } from "./components/FeePercentileChart";
 import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
 import { HistoryView } from "./components/HistoryView";
@@ -95,77 +96,85 @@ export function App() {
         </p>
       </header>
 
-      {health?.congestion.band === "high" && (
-        <div className="banner banner--danger">
-          <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
-          {formatPercent(health.congestion.ledgerCapacityUsage)}
-          {health.congestion.alertThreshold !== undefined &&
-            ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
-          . Transactions may experience surge pricing or delayed inclusion.
-        </div>
-      )}
-
-      {(isStale || error) && (
-        <div className="banner banner--warn">
-          {error
-            ? "Unable to reach the NetPulse backend. Retrying…"
-            : `Data may be stale — backend hasn't refreshed from Horizon in a while.`}
-        </div>
-      )}
-
-      <section className="stat-grid">
-        <StatTile
-          label="Ledger close time"
-          value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
-          sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
-          loading={isLoading}
-        />
-        <StatTile
-          label="Base fee"
-          value={formatStroops(health?.fees.baseFeeStroops ?? null)}
-          loading={isLoading}
-        />
-        <StatTile
-          label="Network congestion"
-          value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
-          sublabel={health?.congestion.band ?? "unknown"}
-          tone={congestionTone[health?.congestion.band ?? "unknown"]}
-          loading={isLoading}
-        />
-        <StatTile
-          label="Throughput"
-          value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
-          sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
-          loading={isLoading}
-        />
-        <StatTile
-          label="Soroban smart contracts"
-          value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
-          sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
-          loading={isLoading}
-        />
-      </section>
-
-      <section className="chart-grid">
-        <LedgerCloseTimeChart ledgers={ledgers ?? []} />
-        <OperationCountChart ledgers={ledgers ?? []} />
-        <TransactionSuccessChart ledgers={ledgers ?? []} />
-        {health && <FeePercentileChart fees={health.fees} />}
-        <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
-        <SorobanActivityChart soroban={soroban} />
-      </section>
-
-      <HistoryView points={historyPoints} range="24h" />
-
-      <footer className="app__footer">
-        {health && (
-          <SyncStatus
-            lastUpdated={health.lastUpdated}
-            secondsSinceLastUpdate={health.secondsSinceLastUpdate}
-            status={health.status}
-          />
+      {/*
+        The header sits outside the boundary so the network selector and theme
+        toggle keep working when the data below fails to render. Keying the
+        boundary by network clears a stale fallback when the visitor switches
+        away from the network whose data caused it.
+      */}
+      <ErrorBoundary key={network}>
+        {health?.congestion.band === "high" && (
+          <div className="banner banner--danger">
+            <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
+            {formatPercent(health.congestion.ledgerCapacityUsage)}
+            {health.congestion.alertThreshold !== undefined &&
+              ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
+            . Transactions may experience surge pricing or delayed inclusion.
+          </div>
         )}
-      </footer>
+
+        {(isStale || error) && (
+          <div className="banner banner--warn">
+            {error
+              ? "Unable to reach the NetPulse backend. Retryingâ€¦"
+              : `Data may be stale â€” backend hasn't refreshed from Horizon in a while.`}
+          </div>
+        )}
+
+        <section className="stat-grid">
+          <StatTile
+            label="Ledger close time"
+            value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
+            sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
+            loading={isLoading}
+          />
+          <StatTile
+            label="Base fee"
+            value={formatStroops(health?.fees.baseFeeStroops ?? null)}
+            loading={isLoading}
+          />
+          <StatTile
+            label="Network congestion"
+            value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
+            sublabel={health?.congestion.band ?? "unknown"}
+            tone={congestionTone[health?.congestion.band ?? "unknown"]}
+            loading={isLoading}
+          />
+          <StatTile
+            label="Throughput"
+            value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
+            sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
+            loading={isLoading}
+          />
+          <StatTile
+            label="Soroban smart contracts"
+            value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
+            sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
+            loading={isLoading}
+          />
+        </section>
+
+        <section className="chart-grid">
+          <LedgerCloseTimeChart ledgers={ledgers ?? []} />
+          <OperationCountChart ledgers={ledgers ?? []} />
+          <TransactionSuccessChart ledgers={ledgers ?? []} />
+          {health && <FeePercentileChart fees={health.fees} />}
+          <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
+          <SorobanActivityChart soroban={soroban} />
+        </section>
+
+        <HistoryView points={historyPoints} range="24h" />
+
+        <footer className="app__footer">
+          {health && (
+            <SyncStatus
+              lastUpdated={health.lastUpdated}
+              secondsSinceLastUpdate={health.secondsSinceLastUpdate}
+              status={health.status}
+            />
+          )}
+        </footer>
+      </ErrorBoundary>
     </div>
   );
 }
