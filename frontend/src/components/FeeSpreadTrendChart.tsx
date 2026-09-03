@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import type { FeeSnapshot } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
+import { describeSeries, joinSummary } from "./chartSummary";
+import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   snapshots: FeeSnapshot[] | null;
@@ -40,9 +41,21 @@ export function FeeSpreadTrendChart({ snapshots, error }: Props) {
       status={resolveChartStatus(snapshots, error)}
       emptyMessage="No fee snapshots in this window."
       errorMessage="Could not load fee data."
+      summary={joinSummary(
+        describeSeries(
+          "Surge spread, p90 minus p50",
+          data.map((d) => d.spread),
+          "stroops",
+        ),
+        describeSeries(
+          "p90 fee",
+          data.map((d) => d.p90),
+          "stroops",
+        ),
+      )}
     >
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data}>
+        <LineChart data={data} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
           <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={25} />
           <YAxis tick={axisTick} stroke={axisStroke} width={45} />

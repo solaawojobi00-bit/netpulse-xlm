@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import type { HealthResponse } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
+import { describeReadings } from "./chartSummary";
+import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   fees: HealthResponse["fees"] | null;
@@ -39,9 +40,13 @@ export function FeePercentileChart({ fees, error }: Props) {
       status={resolveChartStatus(populated, error)}
       emptyMessage="No fee percentiles reported yet."
       errorMessage="Could not load fee data."
+      summary={describeReadings(
+        (data ?? []).map((d) => ({ label: d.percentile, value: d.stroops })),
+        "stroops",
+      )}
     >
       <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data ?? []}>
+        <BarChart data={data ?? []} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
           <XAxis dataKey="percentile" tick={axisTick} stroke={axisStroke} />
           <YAxis tick={axisTick} stroke={axisStroke} width={45} />
