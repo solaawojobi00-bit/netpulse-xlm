@@ -1,32 +1,13 @@
 import type { ReactNode } from "react";
-
-export type ChartStatus = "loading" | "error" | "empty" | "ready";
+import type { ChartStatus } from "./resolveStatus";
 
 /*
- * Status precedence, and why it is this order:
- *
- *   ready > error > loading > empty
- *
- * `ready` wins even when the source is currently erroring, because the six
- * live charts share one WebSocket subscription. Blanking all of them on a
- * dropped connection would throw away data that is seconds old and replace it
- * with six identical error boxes, while the global banner already says the
- * backend is unreachable. Showing the last known series is both more useful
- * and quieter.
- *
- * So a per-chart error appears only when there is nothing to fall back on —
- * a cold start that never succeeded — which is exactly when an empty axis
- * frame would otherwise be indistinguishable from a quiet network.
+ * The status vocabulary and its precedence now live in ./resolveStatus, which
+ * the stat tiles share. Re-exported here so the seven chart call sites keep
+ * importing the pair together.
  */
-export function resolveChartStatus(
-  data: readonly unknown[] | null | undefined,
-  error?: string | null,
-): ChartStatus {
-  if (data && data.length > 0) return "ready";
-  if (error) return "error";
-  if (data === null || data === undefined) return "loading";
-  return "empty";
-}
+export { resolveChartStatus, resolveValueStatus } from "./resolveStatus";
+export type { ChartStatus } from "./resolveStatus";
 
 interface ChartCardProps {
   title: string;

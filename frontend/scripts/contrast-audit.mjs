@@ -165,6 +165,12 @@ const PAIRS = [
   { name: "stat value, good tone", fg: "--good-color", on: "--surface-color", large: true },
   { name: "stat value, warn tone", fg: "--warn-color", on: "--surface-color", large: true },
   { name: "stat value, bad tone", fg: "--bad-color", on: "--surface-color", large: true },
+  /*
+   * Scored at 4.5:1, not 3:1. The tile's "Unavailable" notice is 1rem bold —
+   * 16px — and WCAG large text starts at 18.66px bold, so it does not qualify
+   * for the relaxed threshold the 1.6rem value beside it gets.
+   */
+  { name: "stat tile, unavailable", fg: "--bad-color", on: "--surface-color" },
   { name: "chart card heading", fg: "--text-muted", on: "--surface-color" },
   { name: "chart axis ticks (10px)", fg: "--text-muted", on: "--surface-color" },
   { name: "chart empty-state text", fg: "--text-muted", on: "--surface-color" },
