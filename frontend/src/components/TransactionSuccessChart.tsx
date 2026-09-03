@@ -9,14 +9,16 @@ import {
   YAxis,
 } from "recharts";
 import type { LedgerSample } from "../api";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
 
 interface Props {
-  ledgers: LedgerSample[];
+  ledgers: LedgerSample[] | null;
+  error?: string | null;
 }
 
-export function TransactionSuccessChart({ ledgers }: Props) {
-  const data = ledgers.map((l) => {
+export function TransactionSuccessChart({ ledgers, error }: Props) {
+  const data = (ledgers ?? []).map((l) => {
     const successful = l.successfulTransactionCount ?? 0;
     const failed = l.failedTransactionCount ?? 0;
     const total = successful + failed;
@@ -31,8 +33,12 @@ export function TransactionSuccessChart({ ledgers }: Props) {
   });
 
   return (
-    <div className="chart-card">
-      <h3>Transaction success & failure</h3>
+    <ChartCard
+      title="Transaction success & failure"
+      status={resolveChartStatus(ledgers, error)}
+      emptyMessage="No transactions in this window."
+      errorMessage="Could not load transaction data."
+    >
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -49,6 +55,6 @@ export function TransactionSuccessChart({ ledgers }: Props) {
           <Bar dataKey="failed" stackId="txs" fill="var(--bad-color)" name="Failed" />
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </ChartCard>
   );
 }

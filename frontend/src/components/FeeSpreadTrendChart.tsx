@@ -9,14 +9,16 @@ import {
   YAxis,
 } from "recharts";
 import type { FeeSnapshot } from "../api";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
-  snapshots: FeeSnapshot[];
+  snapshots: FeeSnapshot[] | null;
+  error?: string | null;
 }
 
-export function FeeSpreadTrendChart({ snapshots }: Props) {
-  const data = snapshots.map((s, index) => {
+export function FeeSpreadTrendChart({ snapshots, error }: Props) {
+  const data = (snapshots ?? []).map((s, index) => {
     const time = new Date(s.fetchedAt).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -33,8 +35,12 @@ export function FeeSpreadTrendChart({ snapshots }: Props) {
   });
 
   return (
-    <div className="chart-card">
-      <h3>Fee surge spread trend (p90 − p50 stroops)</h3>
+    <ChartCard
+      title="Fee surge spread trend (p90 − p50 stroops)"
+      status={resolveChartStatus(snapshots, error)}
+      emptyMessage="No fee snapshots in this window."
+      errorMessage="Could not load fee data."
+    >
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -61,6 +67,6 @@ export function FeeSpreadTrendChart({ snapshots }: Props) {
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </ChartCard>
   );
 }

@@ -26,11 +26,38 @@ const mockSoroban: SorobanMetricsResponse = {
 };
 
 describe("SorobanActivityChart", () => {
-  it("renders heading and empty note without throwing when soroban is null", () => {
+  it("shows a loading state, not an empty note, when metrics have not arrived", () => {
+    // null means the metrics have not loaded. Claiming "no invocations" here
+    // would report a quiet network we have not actually observed.
     render(<SorobanActivityChart soroban={null} />);
 
     expect(screen.getByText("Soroban Contract Invocations")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.queryByText(/No Soroban smart contract invocations/i)).not.toBeInTheDocument();
+  });
+
+  it("reports a genuinely quiet window as empty once metrics have arrived", () => {
+    render(
+      <SorobanActivityChart
+        soroban={{
+          network: "mainnet",
+          invocationsPerSecond: 0,
+          recentInvocationsTotal: 0,
+          successfulInvocationsTotal: 0,
+          failedInvocationsTotal: 0,
+          samples: [],
+        }}
+      />,
+    );
+
     expect(screen.getByText(/No Soroban smart contract invocations/i)).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("surfaces an error when metrics failed and nothing was ever loaded", () => {
+    render(<SorobanActivityChart soroban={null} error="connection lost" />);
+
+    expect(screen.getByText(/Could not load Soroban metrics/i)).toBeInTheDocument();
   });
 
   it("renders metrics stats and heading with data", () => {

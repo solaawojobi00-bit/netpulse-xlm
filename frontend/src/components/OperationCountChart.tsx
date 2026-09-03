@@ -8,21 +8,27 @@ import {
   YAxis,
 } from "recharts";
 import type { LedgerSample } from "../api";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
 
 interface Props {
-  ledgers: LedgerSample[];
+  ledgers: LedgerSample[] | null;
+  error?: string | null;
 }
 
-export function OperationCountChart({ ledgers }: Props) {
-  const data = ledgers.map((l) => ({
+export function OperationCountChart({ ledgers, error }: Props) {
+  const data = (ledgers ?? []).map((l) => ({
     sequence: l.sequence,
     operationCount: l.operationCount,
   }));
 
   return (
-    <div className="chart-card">
-      <h3>Operation count per ledger</h3>
+    <ChartCard
+      title="Operation count per ledger"
+      status={resolveChartStatus(ledgers, error)}
+      emptyMessage="No ledgers in this window."
+      errorMessage="Could not load ledger data."
+    >
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -37,6 +43,6 @@ export function OperationCountChart({ ledgers }: Props) {
           <Bar dataKey="operationCount" fill="var(--accent-color)" />
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </ChartCard>
   );
 }
