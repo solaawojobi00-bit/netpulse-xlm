@@ -7,7 +7,7 @@ on:
 
 jobs:
   backend:
-    name: Backend Type-Check
+    name: Backend Type-Check & Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -37,7 +37,7 @@ jobs:
         run: npm test
 
   frontend:
-    name: Frontend Build & Type-Check
+    name: Frontend Build & Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
