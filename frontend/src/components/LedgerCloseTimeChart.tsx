@@ -8,23 +8,33 @@ import {
   YAxis,
 } from "recharts";
 import type { LedgerSample } from "../api";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
-  ledgers: LedgerSample[];
+  ledgers: LedgerSample[] | null;
+  error?: string | null;
 }
 
-export function LedgerCloseTimeChart({ ledgers }: Props) {
-  const data = ledgers
+export function LedgerCloseTimeChart({ ledgers, error }: Props) {
+  const data = (ledgers ?? [])
     .filter((l) => l.closeTimeSeconds !== null)
     .map((l) => ({
       sequence: l.sequence,
       closeTimeSeconds: l.closeTimeSeconds,
     }));
 
+  // Resolved from the filtered series: ledgers can arrive with no close times
+  // yet, which is an empty chart rather than a loading one.
+  const status = resolveChartStatus(ledgers === null ? null : data, error);
+
   return (
-    <div className="chart-card">
-      <h3>Ledger close time</h3>
+    <ChartCard
+      title="Ledger close time"
+      status={status}
+      emptyMessage="No ledger close times in this window."
+      errorMessage="Could not load ledger data."
+    >
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -56,6 +66,6 @@ export function LedgerCloseTimeChart({ ledgers }: Props) {
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </ChartCard>
   );
 }

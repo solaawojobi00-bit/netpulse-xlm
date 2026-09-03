@@ -8,32 +8,22 @@ import {
   YAxis,
 } from "recharts";
 import type { HistoryPoint } from "../api";
-import { formatPercent } from "../format";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
-  points: HistoryPoint[];
+  /** null until the first history fetch resolves. */
+  points: HistoryPoint[] | null;
   range?: string;
+  /** History comes from its own REST call, so it fails independently of the
+   *  live WebSocket data and carries its own error. */
+  error?: string | null;
 }
 
-export function HistoryView({ points, range = "24h" }: Props) {
-  if (points.length === 0) {
-    return (
-      <section className="history-section">
-        <div className="history-section__header">
-          <h2>{range} Historical Trends</h2>
-          <span className="history-badge">Persistent Storage · 5m Aggregation</span>
-        </div>
-        <div className="chart-card chart-card--empty">
-          <p>
-            Historical trend data is accumulating in the persistent SQLite store. Check back after several ledgers close.
-          </p>
-        </div>
-      </section>
-    );
-  }
+export function HistoryView({ points, range = "24h", error }: Props) {
+  const status = resolveChartStatus(points, error);
 
-  const chartData = points.map((p) => {
+  const chartData = (points ?? []).map((p) => {
     const d = new Date(p.timestamp);
     const timeLabel = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const congestionPercent =
@@ -49,6 +39,35 @@ export function HistoryView({ points, range = "24h" }: Props) {
     };
   });
 
+  const emptyMessage =
+    "Historical trend data is accumulating in the persistent SQLite store. Check back after several ledgers close.";
+  const errorMessage =
+    "Could not load historical trends. The live charts above are unaffected.";
+
+  /*
+   * Both history charts are driven by one fetch, so a single state applies to
+   * the whole section. Rendering it in each card would print the same message
+   * twice for one failure — the duplication this issue is meant to avoid.
+   */
+  if (status !== "ready") {
+    return (
+      <section className="history-section">
+        <div className="history-section__header">
+          <h2>{range} Historical Trends</h2>
+          <span className="history-badge">Persistent Storage · 5m Aggregation</span>
+        </div>
+        <ChartCard
+          title={`${range} trends`}
+          status={status}
+          emptyMessage={emptyMessage}
+          errorMessage={errorMessage}
+        >
+          {null}
+        </ChartCard>
+      </section>
+    );
+  }
+
   return (
     <section className="history-section">
       <div className="history-section__header">
@@ -62,8 +81,12 @@ export function HistoryView({ points, range = "24h" }: Props) {
       </div>
 
       <div className="chart-grid">
-        <div className="chart-card">
-          <h3>24h Ledger close time (avg seconds)</h3>
+        <ChartCard
+          title={`${range} Ledger close time (avg seconds)`}
+          status={status}
+          emptyMessage={emptyMessage}
+          errorMessage={errorMessage}
+        >
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -80,10 +103,14 @@ export function HistoryView({ points, range = "24h" }: Props) {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartCard>
 
-        <div className="chart-card">
-          <h3>24h Network congestion (capacity usage %)</h3>
+        <ChartCard
+          title={`${range} Network congestion (capacity usage %)`}
+          status={status}
+          emptyMessage={emptyMessage}
+          errorMessage={errorMessage}
+        >
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -108,7 +135,7 @@ export function HistoryView({ points, range = "24h" }: Props) {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartCard>
       </div>
     </section>
   );

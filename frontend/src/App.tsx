@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FeePercentileChart } from "./components/FeePercentileChart";
 import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
@@ -39,16 +39,31 @@ export function App() {
   const [network, setNetwork] = useState<Network>("mainnet");
   const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, error } = useSubscription(network);
-  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
+  // null until the first fetch resolves, so HistoryView can tell "still
+  // loading" apart from "loaded and empty".
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Switching networks discards the previous network's history rather than
+    // showing it under the new label while the fetch is in flight.
+    setHistoryPoints(null);
+    setHistoryError(null);
+
     function loadHistory() {
       fetchHistory(network, "24h")
         .then((res) => {
-          if (!cancelled) setHistoryPoints(res.points);
+          if (cancelled) return;
+          setHistoryPoints(res.points);
+          setHistoryError(null);
         })
-        .catch(() => {});
+        .catch((err: unknown) => {
+          // Previously swallowed, which made a failing history fetch
+          // indistinguishable from a quiet one.
+          if (cancelled) return;
+          setHistoryError(err instanceof Error ? err.message : String(err));
+        });
     }
     loadHistory();
     const interval = setInterval(loadHistory, 30000);
@@ -116,8 +131,8 @@ export function App() {
         {(isStale || error) && (
           <div className="banner banner--warn">
             {error
-              ? "Unable to reach the NetPulse backend. Retryingâ€¦"
-              : `Data may be stale â€” backend hasn't refreshed from Horizon in a while.`}
+              ? "Unable to reach the NetPulse backend. Retrying…"
+              : `Data may be stale — backend hasn't refreshed from Horizon in a while.`}
           </div>
         )}
 
@@ -154,16 +169,25 @@ export function App() {
           />
         </section>
 
+        {/*
+          Nulls are passed through rather than collapsed with `?? []`: that is
+          the only thing distinguishing "not loaded yet" from "loaded and
+          genuinely empty" by the time data reaches a chart.
+
+          The six live charts share `error` from the WebSocket subscription;
+          history carries its own, so one failing source cannot blank the
+          other.
+        */}
         <section className="chart-grid">
-          <LedgerCloseTimeChart ledgers={ledgers ?? []} />
-          <OperationCountChart ledgers={ledgers ?? []} />
-          <TransactionSuccessChart ledgers={ledgers ?? []} />
-          {health && <FeePercentileChart fees={health.fees} />}
-          <FeeSpreadTrendChart snapshots={feeSnapshots ?? []} />
-          <SorobanActivityChart soroban={soroban} />
+          <LedgerCloseTimeChart ledgers={ledgers} error={error} />
+          <OperationCountChart ledgers={ledgers} error={error} />
+          <TransactionSuccessChart ledgers={ledgers} error={error} />
+          <FeePercentileChart fees={health?.fees ?? null} error={error} />
+          <FeeSpreadTrendChart snapshots={feeSnapshots} error={error} />
+          <SorobanActivityChart soroban={soroban} error={error} />
         </section>
 
-        <HistoryView points={historyPoints} range="24h" />
+        <HistoryView points={historyPoints} range="24h" error={historyError} />
 
         <footer className="app__footer">
           {health && (

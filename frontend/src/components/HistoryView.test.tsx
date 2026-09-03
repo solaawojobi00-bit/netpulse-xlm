@@ -38,7 +38,38 @@ describe("HistoryView", () => {
 
     expect(screen.getByText("12h Historical Trends")).toBeInTheDocument();
     expect(screen.getByText(/5m resolution · 7-day retention/i)).toBeInTheDocument();
+    // Chart headings follow the range prop; they previously hardcoded "24h"
+    // even when the section header said otherwise.
+    expect(screen.getByText("12h Ledger close time (avg seconds)")).toBeInTheDocument();
+    expect(screen.getByText("12h Network congestion (capacity usage %)")).toBeInTheDocument();
+  });
+
+  it("shows a loading state before the first fetch resolves", () => {
+    render(<HistoryView points={null} range="24h" />);
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    // Not loaded is not the same as loaded-and-quiet.
+    expect(screen.queryByText(/Historical trend data is accumulating/i)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a failed history fetch instead of looking empty", () => {
+    render(<HistoryView points={null} range="24h" error="Failed to fetch" />);
+
+    expect(screen.getByText(/Could not load historical trends/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Historical trend data is accumulating/i)).not.toBeInTheDocument();
+  });
+
+  it("states only once that history failed, not once per chart", () => {
+    render(<HistoryView points={null} range="24h" error="Failed to fetch" />);
+
+    expect(screen.getAllByText(/Could not load historical trends/i)).toHaveLength(1);
+  });
+
+  it("keeps showing existing history when a later refresh fails", () => {
+    // A refresh failing should not blank trends the user can still read.
+    render(<HistoryView points={mockPoints} range="24h" error="Failed to fetch" />);
+
     expect(screen.getByText("24h Ledger close time (avg seconds)")).toBeInTheDocument();
-    expect(screen.getByText("24h Network congestion (capacity usage %)")).toBeInTheDocument();
+    expect(screen.queryByText(/Could not load historical trends/i)).not.toBeInTheDocument();
   });
 });

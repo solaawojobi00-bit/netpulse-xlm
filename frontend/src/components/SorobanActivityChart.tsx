@@ -9,15 +9,19 @@ import {
   YAxis,
 } from "recharts";
 import type { SorobanMetricsResponse } from "../api";
+import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
 
 interface Props {
   soroban: SorobanMetricsResponse | null;
+  error?: string | null;
 }
 
-export function SorobanActivityChart({ soroban }: Props) {
-  const samples = soroban?.samples ?? [];
-  const chartData = samples.map((s, idx) => {
+export function SorobanActivityChart({ soroban, error }: Props) {
+  // null means the metrics have not arrived; an empty samples array means they
+  // arrived and there was no contract activity. Only the second is "quiet".
+  const samples = soroban ? soroban.samples : null;
+  const chartData = (samples ?? []).map((s) => {
     const d = new Date(s.timestamp);
     return {
       name: d.toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }),
@@ -31,14 +35,18 @@ export function SorobanActivityChart({ soroban }: Props) {
   const recentTotal = soroban?.recentInvocationsTotal ?? 0;
 
   return (
-    <div className="chart-card soroban-card">
-      <div className="soroban-card__header">
-        <div>
-          <h3>Soroban Contract Invocations</h3>
-          <p className="soroban-card__subtitle">
-            Smart contract activity (<code>invoke_host_function</code>) separated from classic Stellar ops
-          </p>
-        </div>
+    <ChartCard
+      className="soroban-card"
+      title="Soroban Contract Invocations"
+      status={resolveChartStatus(samples, error)}
+      emptyMessage="No Soroban smart contract invocations in the recent sample window. Classic Stellar operations are tracked above."
+      errorMessage="Could not load Soroban metrics."
+      subtitle={
+        <p className="soroban-card__subtitle">
+          Smart contract activity (<code>invoke_host_function</code>) separated from classic Stellar ops
+        </p>
+      }
+      headerExtra={
         <div className="soroban-card__stats">
           <span className="soroban-stat">
             <strong>{invocationsPerSec}</strong> inv/s
@@ -47,8 +55,8 @@ export function SorobanActivityChart({ soroban }: Props) {
             {recentTotal} total in window
           </span>
         </div>
-      </div>
-
+      }
+    >
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -79,12 +87,6 @@ export function SorobanActivityChart({ soroban }: Props) {
           />
         </LineChart>
       </ResponsiveContainer>
-
-      {recentTotal === 0 && (
-        <p className="soroban-card__empty-note">
-          No Soroban smart contract invocations in the recent sample window. Classic Stellar operations are tracked above.
-        </p>
-      )}
-    </div>
+    </ChartCard>
   );
 }
