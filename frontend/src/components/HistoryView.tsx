@@ -7,22 +7,60 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { HistoryPoint } from "../api";
+import type { HistoryPoint, HistoryRange } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { describeSeries } from "./chartSummary";
 import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
+import { SegmentedControl } from "./SegmentedControl";
 
 interface Props {
   /** null until the first history fetch resolves. */
   points: HistoryPoint[] | null;
-  range?: string;
+  range?: HistoryRange;
   /** History comes from its own REST call, so it fails independently of the
    *  live WebSocket data and carries its own error. */
   error?: string | null;
+  /**
+   * Supplying both turns the range into a control. They are optional so the
+   * component stays renderable as a read-only view in tests and in any future
+   * caller that has no range to offer.
+   */
+  rangeOptions?: readonly { value: HistoryRange; label: string }[];
+  onRangeChange?: (next: HistoryRange) => void;
 }
 
-export function HistoryView({ points, range = "24h", error }: Props) {
+export function HistoryView({
+  points,
+  range = "24h",
+  error,
+  rangeOptions,
+  onRangeChange,
+}: Props) {
   const status = resolveChartStatus(points, error);
+
+  /*
+   * The picker sits beside the badge rather than replacing it: the badge says
+   * what the data *is* (5-minute buckets, kept a week) and the picker says how
+   * much of it to show. Losing the first to make room for the second would
+   * drop the context that makes the range meaningful.
+   *
+   * The same block renders in every state, so the control does not vanish
+   * while history is loading or failed — those are exactly the moments someone
+   * might want to try a shorter range.
+   */
+  const headerControls = (
+    <div className="history-section__controls">
+      {rangeOptions && onRangeChange && (
+        <SegmentedControl
+          label="History time range"
+          options={rangeOptions}
+          value={range}
+          onChange={onRangeChange}
+        />
+      )}
+      <span className="history-badge">5m resolution · 7-day retention</span>
+    </div>
+  );
 
   const chartData = (points ?? []).map((p) => {
     const d = new Date(p.timestamp);
@@ -55,7 +93,7 @@ export function HistoryView({ points, range = "24h", error }: Props) {
       <section className="history-section" aria-labelledby="history-heading">
         <div className="history-section__header">
           <h2 id="history-heading">{range} Historical Trends</h2>
-          <span className="history-badge">Persistent Storage · 5m Aggregation</span>
+          {headerControls}
         </div>
         <ChartCard
           title={`${range} trends`}
@@ -78,7 +116,7 @@ export function HistoryView({ points, range = "24h", error }: Props) {
             Coarser historical trend view aggregated from persistent SQLite storage
           </p>
         </div>
-        <span className="history-badge">5m resolution · 7-day retention</span>
+        {headerControls}
       </div>
 
       <div className="chart-grid">

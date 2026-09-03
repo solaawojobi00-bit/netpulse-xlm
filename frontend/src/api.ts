@@ -94,9 +94,18 @@ export interface HistoryResponse {
   points: HistoryPoint[];
 }
 
+/*
+ * The ranges the backend actually understands. See the range parsing in
+ * backend/src/index.ts, which maps anything else onto 24h — typing it here
+ * keeps a nonsense range from reaching the request in the first place.
+ */
+export const HISTORY_RANGES = ["6h", "12h", "24h"] as const;
+
+export type HistoryRange = (typeof HISTORY_RANGES)[number];
+
 export async function fetchHistory(
   network: Network = "mainnet",
-  range: string = "24h",
+  range: HistoryRange = "24h",
 ): Promise<HistoryResponse> {
   const res = await fetch(`/api/history?network=${network}&range=${range}`);
   if (!res.ok) throw new Error(`GET /api/history failed: ${res.status}`);
