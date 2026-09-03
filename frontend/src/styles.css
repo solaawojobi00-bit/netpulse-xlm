@@ -498,11 +498,13 @@ body {
 }
 
 /*
- * Matches the 200px ResponsiveContainer the charts render into, so swapping
- * between loading, empty, error and the chart itself never moves the page.
+ * Matches the ResponsiveContainer the chart renders into, so swapping between
+ * loading, empty, error and the chart itself never moves the page. ChartCard
+ * sets the custom property from its `height` prop; 200px is the default every
+ * card but the operation breakdown uses.
  */
 .chart-card__state {
-  height: 200px;
+  height: var(--chart-state-height, 200px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -635,6 +637,25 @@ body {
   text-align: center;
   padding: 32px 16px;
   color: var(--text-muted);
+}
+
+/*
+ * Says the figures are a rolling sample rather than an all-time total. Sits
+ * under the card title in the same muted register as the Soroban subtitle.
+ */
+.chart-card__note {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/*
+ * The breakdown's y-axis labels are words, so this card needs more width than
+ * the 320px the other charts are happy at; it takes the full row rather than
+ * squeezing labels into a half-width column.
+ */
+.operation-type-card {
+  grid-column: 1 / -1;
 }
 
 .soroban-card__header {

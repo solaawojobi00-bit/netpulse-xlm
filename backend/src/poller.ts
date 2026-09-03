@@ -6,17 +6,94 @@ import {
   type Network,
 } from "./horizon.js";
 import { logger } from "./logger.js";
-import type { FeeSnapshot, LedgerSample, SorobanMetricsResponse, SorobanSample } from "./types.js";
+import type {
+  FeeSnapshot,
+  LedgerSample,
+  OperationBreakdownResponse,
+  OperationTypeCount,
+  OperationTypeSample,
+  SorobanMetricsResponse,
+  SorobanSample,
+} from "./types.js";
 
 const MAX_LEDGERS = 50;
 const MAX_FEE_SNAPSHOTS = 10;
 const MAX_SOROBAN_SAMPLES = 20;
 const LEDGERS_PER_POLL = 20;
 
+/** Operation-type samples are kept in step with the Soroban ones — same poll. */
+const MAX_OPERATION_SAMPLES = MAX_SOROBAN_SAMPLES;
+
+/*
+ * A defensive ceiling on distinct type keys held per sample, not a display
+ * choice. Stellar defines roughly fifteen operation types, so this is never
+ * reached in practice; it exists so that a Horizon that starts returning novel
+ * type strings — a protocol upgrade, a bug, a hostile response — cannot grow
+ * the store without limit. Overflow is folded into the `other` bucket, so the
+ * total stays right even when individual rare types are dropped.
+ */
+const MAX_TRACKED_TYPES = 30;
+
+/*
+ * How many named types the response carries before the tail is grouped. The
+ * distribution is very uneven — payments and offers dominate while several
+ * types sit near zero — so charting all fifteen produces a row of slivers with
+ * unreadable labels.
+ */
+const TOP_N_TYPES = 6;
+
+/**
+ * The grouped-tail bucket. Consumers should read `isOther` rather than compare
+ * against this string, so a future Horizon type genuinely called "other"
+ * cannot be mistaken for the bucket.
+ */
+export const OTHER_OPERATION_TYPE = "other";
+
+/**
+ * Counts operations by type, folding anything past MAX_TRACKED_TYPES into
+ * `other` so the returned map is bounded regardless of the input.
+ *
+ * Exported for testing: this is the part with the edge cases.
+ */
+export function countOperationTypes(
+  operations: readonly { type?: unknown }[],
+): OperationTypeSample {
+  const counts: Record<string, number> = {};
+  let total = 0;
+
+  for (const op of operations) {
+    // A record whose type is missing or non-string still happened, so it is
+    // counted — as `other` rather than as a key like "undefined".
+    const type = typeof op?.type === "string" && op.type.length > 0 ? op.type : OTHER_OPERATION_TYPE;
+    counts[type] = (counts[type] ?? 0) + 1;
+    total += 1;
+  }
+
+  const keys = Object.keys(counts);
+  if (keys.length > MAX_TRACKED_TYPES) {
+    // Keep the largest types by count; everything else becomes `other`. Ties
+    // break on the type name so the result does not depend on key order.
+    const ranked = keys.sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+    const kept = ranked.slice(0, MAX_TRACKED_TYPES - 1);
+    const dropped = ranked.slice(MAX_TRACKED_TYPES - 1);
+
+    const trimmed: Record<string, number> = {};
+    for (const key of kept) trimmed[key] = counts[key];
+    trimmed[OTHER_OPERATION_TYPE] =
+      (trimmed[OTHER_OPERATION_TYPE] ?? 0) +
+      dropped.reduce((acc, key) => acc + counts[key], 0);
+
+    return { timestamp: new Date().toISOString(), total, counts: trimmed };
+  }
+
+  return { timestamp: new Date().toISOString(), total, counts };
+}
+
 export class RollingStore {
   private ledgers: LedgerSample[] = [];
   private feeSnapshots: FeeSnapshot[] = [];
   private sorobanSamples: SorobanSample[] = [];
+  private operationTypeSamples: OperationTypeSample[] = [];
   private lastSuccessAt: Date | null = null;
   private lastErrorMessage: string | null = null;
 
@@ -46,6 +123,31 @@ export class RollingStore {
 
   getSorobanSamples(): SorobanSample[] {
     return this.sorobanSamples;
+  }
+
+  addOperationTypeSample(sample: OperationTypeSample): void {
+    this.operationTypeSamples.push(sample);
+    if (this.operationTypeSamples.length > MAX_OPERATION_SAMPLES) {
+      this.operationTypeSamples.shift();
+    }
+  }
+
+  getOperationTypeSamples(): OperationTypeSample[] {
+    return this.operationTypeSamples;
+  }
+
+  /**
+   * Empties the store. The samples are deliberately cumulative across polls,
+   * which makes exact assertions in tests depend on whatever ran before them;
+   * this gives a test a clean window without reaching into private fields.
+   */
+  reset(): void {
+    this.ledgers = [];
+    this.feeSnapshots = [];
+    this.sorobanSamples = [];
+    this.operationTypeSamples = [];
+    this.lastSuccessAt = null;
+    this.lastErrorMessage = null;
   }
 
   markSuccess(): void {
@@ -142,6 +244,9 @@ export async function pollOperations(network: Network): Promise<void> {
     };
 
     currentStore.addSorobanSample(sample);
+    // The same fetch already carries every operation's type; this poll used to
+    // narrow to invoke_host_function and discard the rest.
+    currentStore.addOperationTypeSample(countOperationTypes(operations));
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
@@ -289,6 +394,78 @@ export function buildSorobanResponse(network: Network): SorobanMetricsResponse {
     successfulInvocationsTotal,
     failedInvocationsTotal,
     samples,
+  };
+}
+
+/**
+ * Totals the stored samples and groups the long tail.
+ *
+ * The window is a rolling sample of recent polls, not a per-ledger or all-time
+ * figure — `sampleCount` and `windowSeconds` are returned so the chart can say
+ * so rather than presenting the number bare.
+ */
+export function buildOperationBreakdownResponse(
+  network: Network,
+): OperationBreakdownResponse {
+  const store = stores[network] ?? stores.mainnet;
+  const samples = store.getOperationTypeSamples();
+
+  const totals = new Map<string, number>();
+  let totalOperations = 0;
+  for (const sample of samples) {
+    for (const [type, count] of Object.entries(sample.counts)) {
+      totals.set(type, (totals.get(type) ?? 0) + count);
+    }
+    totalOperations += sample.total;
+  }
+
+  let windowSeconds: number | null = null;
+  if (samples.length >= 2) {
+    const start = new Date(samples[0].timestamp).getTime();
+    const end = new Date(samples[samples.length - 1].timestamp).getTime();
+    const elapsed = (end - start) / 1000;
+    if (Number.isFinite(elapsed) && elapsed >= 0) {
+      windowSeconds = Math.round(elapsed);
+    }
+  }
+
+  // Anything already folded into `other` upstream stays out of the named
+  // ranking, so it cannot displace a real type from the top N.
+  const named = [...totals.entries()]
+    .filter(([type]) => type !== OTHER_OPERATION_TYPE)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  const kept = named.slice(0, TOP_N_TYPES);
+  const tail = named.slice(TOP_N_TYPES);
+  const otherCount =
+    (totals.get(OTHER_OPERATION_TYPE) ?? 0) + tail.reduce((acc, [, n]) => acc + n, 0);
+
+  const share = (count: number) =>
+    totalOperations > 0 ? Number((count / totalOperations).toFixed(4)) : 0;
+
+  const breakdown: OperationTypeCount[] = kept.map(([type, count]) => ({
+    type,
+    count,
+    share: share(count),
+    isOther: false,
+  }));
+
+  if (otherCount > 0) {
+    breakdown.push({
+      type: OTHER_OPERATION_TYPE,
+      count: otherCount,
+      share: share(otherCount),
+      isOther: true,
+    });
+  }
+
+  return {
+    network,
+    sampleCount: samples.length,
+    windowSeconds,
+    totalOperations,
+    distinctTypes: totals.size,
+    breakdown,
   };
 }
 

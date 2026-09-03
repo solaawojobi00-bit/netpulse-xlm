@@ -209,6 +209,12 @@ const UI_PAIRS = [
   { name: "focus ring on card", fg: "--accent-color", on: "--surface-color" },
   { name: "sync indicator dot, ok", fg: "--good-color", on: "--bg-color" },
   { name: "sync indicator dot, stale", fg: "--warn-color", on: "--bg-color" },
+  /*
+   * The operation-breakdown bars. These are graphics required to understand
+   * the chart, not decoration, so 1.4.11's 3:1 applies to both fills.
+   */
+  { name: "breakdown bar", fg: "--accent-color", on: "--surface-color" },
+  { name: "breakdown bar, grouped tail", fg: "--text-muted", on: "--surface-color" },
   { name: "congestion chip border, good", fg: "--good-color", on: "--surface-color" },
   { name: "congestion chip border, warn", fg: "--warn-color", on: "--surface-color" },
   { name: "congestion chip border, bad", fg: "--bad-color", on: "--surface-color" },

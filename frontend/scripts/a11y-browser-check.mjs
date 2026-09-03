@@ -100,6 +100,22 @@ const routes = {
       transactions: 200 + i,
     })),
   },
+  "/api/operations/breakdown": {
+    network: "mainnet",
+    sampleCount: 12,
+    windowSeconds: 360,
+    totalOperations: 1180,
+    distinctTypes: 11,
+    breakdown: [
+      { type: "payment", count: 520, share: 0.4407, isOther: false },
+      { type: "manage_sell_offer", count: 240, share: 0.2034, isOther: false },
+      { type: "path_payment_strict_send", count: 165, share: 0.1398, isOther: false },
+      { type: "change_trust", count: 110, share: 0.0932, isOther: false },
+      { type: "invoke_host_function", count: 74, share: 0.0627, isOther: false },
+      { type: "create_account", count: 41, share: 0.0347, isOther: false },
+      { type: "other", count: 30, share: 0.0254, isOther: true },
+    ],
+  },
   "/api/soroban": {
     network: "mainnet",
     invocationsPerSecond: 3,

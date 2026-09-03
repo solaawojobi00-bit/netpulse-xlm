@@ -13,7 +13,7 @@ vi.mock("./horizon.js", () => ({
 
 import { fetchFeeStats, fetchRecentLedgers, fetchRecentOperations } from "./horizon.js";
 import { createApp } from "./index.js";
-import { pollOnce } from "./poller.js";
+import { pollOnce, stores } from "./poller.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 const app = createApp();
@@ -251,6 +251,68 @@ describe("Backend API Routes", () => {
       expect(res.body).toHaveProperty("successfulInvocationsTotal", 1);
       expect(res.body).toHaveProperty("failedInvocationsTotal", 0);
       expect(Array.isArray(res.body.samples)).toBe(true);
+    });
+  });
+
+  describe("GET /api/operations/breakdown", () => {
+    beforeEach(() => {
+      // Samples accumulate across polls by design, so an exact count here
+      // would otherwise depend on which tests ran first.
+      stores.mainnet.reset();
+      stores.testnet.reset();
+    });
+
+    it("returns every operation type from the poll, not just the Soroban ones", async () => {
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);
+      vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
+      vi.mocked(fetchRecentOperations).mockResolvedValue([
+        {
+          id: "1",
+          paging_token: "1",
+          transaction_successful: true,
+          type: "invoke_host_function",
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: "2",
+          paging_token: "2",
+          transaction_successful: false,
+          type: "payment",
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: "3",
+          paging_token: "3",
+          transaction_successful: true,
+          type: "payment",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      await pollOnce("mainnet");
+
+      const res = await request(app).get("/api/operations/breakdown");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "mainnet");
+
+      // The whole point of the issue: `payment` used to be discarded here.
+      const payment = res.body.breakdown.find(
+        (b: { type: string }) => b.type === "payment",
+      );
+      expect(payment.count).toBe(2);
+      expect(
+        res.body.breakdown.find((b: { type: string }) => b.type === "invoke_host_function")
+          .count,
+      ).toBe(1);
+      expect(res.body.totalOperations).toBe(3);
+    });
+
+    it("honours the network query param", async () => {
+      const res = await request(app).get("/api/operations/breakdown?network=testnet");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "testnet");
+      expect(Array.isArray(res.body.breakdown)).toBe(true);
     });
   });
 });

@@ -3,11 +3,13 @@ import {
   fetchHealth,
   fetchRecentFees,
   fetchRecentLedgers,
+  fetchOperationBreakdown,
   fetchSorobanMetrics,
   type FeeSnapshot,
   type HealthResponse,
   type LedgerSample,
   type Network,
+  type OperationBreakdownResponse,
   type SorobanMetricsResponse,
 } from "./api";
 
@@ -18,6 +20,7 @@ export interface SubscriptionData {
   ledgers: LedgerSample[] | null;
   feeSnapshots: FeeSnapshot[] | null;
   soroban: SorobanMetricsResponse | null;
+  operationBreakdown: OperationBreakdownResponse | null;
   error: string | null;
   isStreaming: boolean;
 }
@@ -27,6 +30,8 @@ export function useSubscription(network: Network): SubscriptionData {
   const [ledgers, setLedgers] = useState<LedgerSample[] | null>(null);
   const [feeSnapshots, setFeeSnapshots] = useState<FeeSnapshot[] | null>(null);
   const [soroban, setSoroban] = useState<SorobanMetricsResponse | null>(null);
+  const [operationBreakdown, setOperationBreakdown] =
+    useState<OperationBreakdownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
@@ -44,17 +49,19 @@ export function useSubscription(network: Network): SubscriptionData {
         return;
       }
       try {
-        const [h, l, f, s] = await Promise.all([
+        const [h, l, f, s, ob] = await Promise.all([
           fetchHealth(networkRef.current),
           fetchRecentLedgers(networkRef.current),
           fetchRecentFees(networkRef.current),
           fetchSorobanMetrics(networkRef.current),
+          fetchOperationBreakdown(networkRef.current),
         ]);
         if (!cancelled) {
           setHealth(h);
           setLedgers(l);
           setFeeSnapshots(f);
           setSoroban(s);
+          setOperationBreakdown(ob);
           setError(null);
         }
       } catch (err) {
@@ -91,6 +98,9 @@ export function useSubscription(network: Network): SubscriptionData {
             setHealth(payload.health);
             setLedgers(payload.ledgers);
             setFeeSnapshots(payload.fees);
+            if (payload.operationBreakdown) {
+              setOperationBreakdown(payload.operationBreakdown);
+            }
             if (payload.soroban) {
               setSoroban(payload.soroban);
             }
@@ -142,6 +152,11 @@ export function useSubscription(network: Network): SubscriptionData {
         if (!cancelled) setSoroban(s);
       })
       .catch(() => {});
+    void fetchOperationBreakdown(network)
+      .then((ob) => {
+        if (!cancelled) setOperationBreakdown(ob);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -156,5 +171,13 @@ export function useSubscription(network: Network): SubscriptionData {
     };
   }, [network]);
 
-  return { health, ledgers, feeSnapshots, soroban, error, isStreaming };
+  return {
+    health,
+    ledgers,
+    feeSnapshots,
+    soroban,
+    operationBreakdown,
+    error,
+    isStreaming,
+  };
 }
