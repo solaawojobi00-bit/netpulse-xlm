@@ -5,7 +5,7 @@ import { StatTile } from "./StatTile";
 describe("StatTile", () => {
   it("renders loading skeletons when loading is true", () => {
     const { container } = render(
-      <StatTile label="Base fee" value="100 stroops" loading={true} />,
+      <StatTile label="Base fee" value="100 stroops" status="loading" />,
     );
 
     expect(screen.getByText("Base fee")).toBeInTheDocument();
@@ -32,9 +32,40 @@ describe("StatTile", () => {
   });
 
   it("hides the band while loading rather than showing a stale severity", () => {
-    render(<StatTile label="Network congestion" value={null} band="high" tone="bad" loading />);
+    render(<StatTile label="Network congestion" value={null} band="high" tone="bad" status="loading" />);
 
     expect(screen.queryByText("high")).not.toBeInTheDocument();
+  });
+
+  it("says the value is unavailable instead of pulsing forever", () => {
+    const { container } = render(
+      <StatTile label="Base fee" value="100 stroops" status="error" />,
+    );
+
+    // The defect this replaces: an indefinite skeleton animation promising
+    // data was about to arrive at exactly the moment it was not.
+    expect(container.querySelector(".stat-tile__skeleton")).not.toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("100 stroops")).not.toBeInTheDocument();
+  });
+
+  it("announces the failure politely, naming which tile it is", () => {
+    render(<StatTile label="Base fee" value={null} status="error" />);
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveAccessibleName("Base fee: unavailable");
+    // One outage puts this on all five tiles; assertive would interrupt five
+    // times for a single cause.
+    expect(region).not.toHaveAttribute("aria-live", "assertive");
+  });
+
+  it("keeps showing a value that already arrived, even while erroring", () => {
+    // resolveValueStatus never yields "error" while data exists, but the tile
+    // must not blank the value if a caller ever passes "ready" with an error.
+    render(<StatTile label="Base fee" value="100 stroops" status="ready" />);
+
+    expect(screen.getByText("100 stroops")).toBeInTheDocument();
+    expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
   });
 
   it("renders em-dash for null value once loaded", () => {

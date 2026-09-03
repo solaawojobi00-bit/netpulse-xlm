@@ -6,6 +6,7 @@ import { HistoryView } from "./components/HistoryView";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { SorobanActivityChart } from "./components/SorobanActivityChart";
+import { resolveValueStatus } from "./components/resolveStatus";
 import { SegmentedControl } from "./components/SegmentedControl";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
@@ -93,7 +94,17 @@ export function App() {
     };
   }, [network, range]);
 
-  const isLoading = health === null;
+  /*
+   * Was `health === null`, which conflated "not here yet" with "will never
+   * arrive" and so left all five tiles pulsing indefinitely through an outage.
+   * The same helper the chart cards use decides this now, so the tiles and the
+   * charts cannot disagree about whether the backend is reachable (#71).
+   *
+   * `health` is passed as the source rather than any individual field: once it
+   * arrives the tiles are ready, and a null field within it renders an em dash,
+   * which is an answer rather than a gap.
+   */
+  const statStatus = resolveValueStatus(health, error);
   const isStale = health?.status === "stale";
 
   return (
@@ -172,12 +183,12 @@ export function App() {
               label="Ledger close time"
               value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
               sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
-              loading={isLoading}
+              status={statStatus}
             />
             <StatTile
               label="Base fee"
               value={formatStroops(health?.fees.baseFeeStroops ?? null)}
-              loading={isLoading}
+              status={statStatus}
             />
             {/*
               The band moves from `sublabel` to `band`, which renders it as a
@@ -189,19 +200,25 @@ export function App() {
               value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
               band={health?.congestion.band ?? "unknown"}
               tone={congestionTone[health?.congestion.band ?? "unknown"]}
-              loading={isLoading}
+              status={statStatus}
             />
             <StatTile
               label="Throughput"
               value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
               sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
-              loading={isLoading}
+              status={statStatus}
             />
+            {/*
+              Keyed to `soroban`, not `health`. They arrive separately, and
+              keying this tile to health meant that if the Soroban metrics
+              alone were missing it read "0 inv/s" — a confident zero standing
+              in for a number nobody had.
+            */}
             <StatTile
               label="Soroban smart contracts"
               value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
               sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
-              loading={isLoading}
+              status={resolveValueStatus(soroban, error)}
             />
           </section>
 

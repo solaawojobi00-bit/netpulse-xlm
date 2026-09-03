@@ -130,7 +130,7 @@ describe("axe: no mechanical violations", () => {
   });
 
   it("stat tile, loading", async () => {
-    const { container } = render(<StatTile label="Base fee" value={null} loading />);
+    const { container } = render(<StatTile label="Base fee" value={null} status="loading" />);
     await expectNoViolations(container);
   });
 
@@ -305,7 +305,7 @@ describe("state is not carried by colour alone", () => {
 
   it("gives the loading skeleton a name a screen reader will actually use", () => {
     // aria-label on a role-less <div> is ignored; role="status" makes it count.
-    render(<StatTile label="Base fee" value={null} loading />);
+    render(<StatTile label="Base fee" value={null} status="loading" />);
     expect(screen.getByRole("status")).toHaveAccessibleName("Base fee: loading");
   });
 });

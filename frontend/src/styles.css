@@ -343,15 +343,42 @@ body {
   margin-bottom: 6px;
 }
 
+/*
+ * The value, the loading skeleton and the unavailable notice are all pinned to
+ * 1.8rem so a tile is exactly the same height whichever one is showing. Before
+ * this the value's line box and the skeleton differed by a couple of pixels,
+ * and the whole grid twitched as data arrived.
+ */
 .stat-tile__value {
   font-size: 1.6rem;
   font-weight: 600;
+  line-height: 1.8rem;
+}
+
+.stat-tile__unavailable {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.8rem;
+  color: var(--bad-color);
+}
+
+/*
+ * Reserves the sub-row in every state, so the congestion tile does not grow
+ * when its band chip replaces the sub-skeleton. Sized to the chip, which is
+ * the tallest thing that can land here.
+ */
+.stat-tile__sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 1.5rem;
+  margin-top: 6px;
 }
 
 .stat-tile__sublabel {
   color: var(--text-muted);
   font-size: 0.8rem;
-  margin-top: 4px;
 }
 
 .stat-tile--good .stat-tile__value {
@@ -377,7 +404,6 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 6px;
   padding: 2px 8px;
   border-radius: 9999px;
   font-size: 0.75rem;
@@ -425,9 +451,8 @@ body {
 }
 
 .stat-tile__skeleton--sub {
-  height: 0.8rem;
+  height: 0.9rem;
   width: 40%;
-  margin-top: 8px;
 }
 
 @keyframes pulse {
