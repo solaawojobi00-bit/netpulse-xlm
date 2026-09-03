@@ -154,7 +154,12 @@ body {
   font-size: 1.75rem;
 }
 
-.network-selector {
+/*
+ * Shared by the network selector and the history range picker. Both are
+ * "pick one of a few", so they share the styling as well as the markup —
+ * see components/SegmentedControl.tsx.
+ */
+.segmented {
   display: inline-flex;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -162,7 +167,7 @@ body {
   overflow: hidden;
 }
 
-.network-selector__btn {
+.segmented__btn {
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -173,18 +178,18 @@ body {
   transition: all 0.15s ease;
 }
 
-.network-selector__btn:hover {
+.segmented__btn:hover {
   color: var(--text-color);
 }
 
 /*
- * The selected network was previously marked by `background: var(--border-color)`
- * over `var(--surface-color)` — 1.3:1, so which network you were looking at was
+ * The selected option was previously marked by `background: var(--border-color)`
+ * over `var(--surface-color)` — 1.3:1, so which one you were looking at was
  * conveyed almost entirely by a font-weight bump. The accent tint and accent
  * text clear the 3:1 that WCAG 1.4.11 asks of a state indicator, and the inset
  * ring gives the state a shape as well as a colour.
  */
-.network-selector__btn--active {
+.segmented__btn--active {
   background: var(--accent-tint-bg);
   color: var(--accent-color);
   font-weight: 600;
@@ -576,6 +581,14 @@ body {
 .history-section__header h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+/* Range picker and the resolution badge; wraps onto its own line when narrow. */
+.history-section__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .history-section__subtitle {

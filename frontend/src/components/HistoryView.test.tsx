@@ -30,7 +30,10 @@ describe("HistoryView", () => {
 
     expect(screen.getByText("24h Historical Trends")).toBeInTheDocument();
     expect(screen.getByText(/Historical trend data is accumulating/i)).toBeInTheDocument();
-    expect(screen.getByText(/Persistent Storage · 5m Aggregation/i)).toBeInTheDocument();
+    // One badge in every state. The empty state used to say "Persistent
+    // Storage · 5m Aggregation" while the loaded state said "5m resolution ·
+    // 7-day retention" — two descriptions of the same store, for no reason.
+    expect(screen.getByText(/5m resolution · 7-day retention/i)).toBeInTheDocument();
   });
 
   it("renders chart headings and subtitle when points are provided", () => {

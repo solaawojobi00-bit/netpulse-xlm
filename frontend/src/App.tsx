@@ -6,6 +6,7 @@ import { HistoryView } from "./components/HistoryView";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
 import { SorobanActivityChart } from "./components/SorobanActivityChart";
+import { SegmentedControl } from "./components/SegmentedControl";
 import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -15,7 +16,9 @@ import {
   fetchHistory,
   fetchRecentFees,
   fetchRecentLedgers,
+  HISTORY_RANGES,
   type HistoryPoint,
+  type HistoryRange,
   type Network,
 } from "./api";
 import {
@@ -25,6 +28,7 @@ import {
   formatSeconds,
   formatStroops,
 } from "./format";
+import { useQueryParam } from "./useQueryParam";
 import { useSubscription } from "./useSubscription";
 import { useTheme } from "./useTheme";
 
@@ -35,8 +39,24 @@ const congestionTone: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   unknown: "neutral",
 };
 
+const NETWORKS = ["mainnet", "testnet"] as const satisfies readonly Network[];
+
+const NETWORK_OPTIONS = [
+  { value: "mainnet" as const, label: "Mainnet" },
+  { value: "testnet" as const, label: "Testnet" },
+];
+
+const RANGE_OPTIONS = HISTORY_RANGES.map((value) => ({ value, label: value }));
+
 export function App() {
-  const [network, setNetwork] = useState<Network>("mainnet");
+  /*
+   * Network and range live in the query string so the URL is shareable: the
+   * link you paste is the view you are looking at. Both are read
+   * synchronously on first render, so a URL carrying params paints that view
+   * directly rather than showing mainnet/24h and snapping.
+   */
+  const [network, setNetwork] = useQueryParam<Network>("network", NETWORKS, "mainnet");
+  const [range, setRange] = useQueryParam<HistoryRange>("range", HISTORY_RANGES, "24h");
   const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, error } = useSubscription(network);
   // null until the first fetch resolves, so HistoryView can tell "still
@@ -46,13 +66,13 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    // Switching networks discards the previous network's history rather than
+    // Switching network or range discards the previous result rather than
     // showing it under the new label while the fetch is in flight.
     setHistoryPoints(null);
     setHistoryError(null);
 
     function loadHistory() {
-      fetchHistory(network, "24h")
+      fetchHistory(network, range)
         .then((res) => {
           if (cancelled) return;
           setHistoryPoints(res.points);
@@ -71,7 +91,7 @@ export function App() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [network]);
+  }, [network, range]);
 
   const isLoading = health === null;
   const isStale = health?.status === "stale";
@@ -82,30 +102,12 @@ export function App() {
         <div className="app__header-top">
           <div className="app__header-brand">
             <h1>NetPulse</h1>
-            {/*
-              `aria-pressed` is the point here: the selected network was
-              previously conveyed only by a background tint and a heavier font,
-              neither of which reaches assistive technology, so a screen reader
-              user could not tell which network they were looking at.
-            */}
-            <div className="network-selector" role="group" aria-label="Stellar Network">
-              <button
-                type="button"
-                className={`network-selector__btn ${network === "mainnet" ? "network-selector__btn--active" : ""}`}
-                aria-pressed={network === "mainnet"}
-                onClick={() => setNetwork("mainnet")}
-              >
-                Mainnet
-              </button>
-              <button
-                type="button"
-                className={`network-selector__btn ${network === "testnet" ? "network-selector__btn--active" : ""}`}
-                aria-pressed={network === "testnet"}
-                onClick={() => setNetwork("testnet")}
-              >
-                Testnet
-              </button>
-            </div>
+            <SegmentedControl
+              label="Stellar Network"
+              options={NETWORK_OPTIONS}
+              value={network}
+              onChange={setNetwork}
+            />
           </div>
           <div className="app__header-actions">
             {health?.horizonUrl && (
@@ -224,7 +226,13 @@ export function App() {
             <SorobanActivityChart soroban={soroban} error={error} />
           </section>
 
-          <HistoryView points={historyPoints} range="24h" error={historyError} />
+          <HistoryView
+            points={historyPoints}
+            range={range}
+            error={historyError}
+            rangeOptions={RANGE_OPTIONS}
+            onRangeChange={setRange}
+          />
         </ErrorBoundary>
       </main>
 
