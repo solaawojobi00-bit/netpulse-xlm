@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import type { LedgerSample } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, barTooltipCursor, tooltipProps } from "./chartTheme";
+import { describeSeries } from "./chartSummary";
+import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   ledgers: LedgerSample[] | null;
@@ -28,9 +29,13 @@ export function OperationCountChart({ ledgers, error }: Props) {
       status={resolveChartStatus(ledgers, error)}
       emptyMessage="No ledgers in this window."
       errorMessage="Could not load ledger data."
+      summary={describeSeries(
+        "Operations per ledger",
+        data.map((d) => d.operationCount),
+      )}
     >
       <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data}>
+        <BarChart data={data} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
           <XAxis
             dataKey="sequence"

@@ -62,6 +62,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Measures the palette in styles.css against WCAG AA. jsdom cannot
+      # resolve cascaded colours, so axe in the test suite skips contrast and
+      # this covers it instead.
+      - name: Check colour contrast
+        working-directory: frontend
+        run: npm run audit:contrast
+
       - name: Run tests
         working-directory: frontend
         run: npm test

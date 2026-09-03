@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import type { LedgerSample } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
+import { describeSeries } from "./chartSummary";
+import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   ledgers: LedgerSample[] | null;
@@ -34,9 +35,14 @@ export function LedgerCloseTimeChart({ ledgers, error }: Props) {
       status={status}
       emptyMessage="No ledger close times in this window."
       errorMessage="Could not load ledger data."
+      summary={describeSeries(
+        "Close time per ledger",
+        data.map((d) => d.closeTimeSeconds),
+        "seconds",
+      )}
     >
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data}>
+        <LineChart data={data} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
           <XAxis
             dataKey="sequence"

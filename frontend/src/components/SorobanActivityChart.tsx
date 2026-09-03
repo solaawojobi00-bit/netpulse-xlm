@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import type { SorobanMetricsResponse } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
+import { describeSeries, joinSummary } from "./chartSummary";
+import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   soroban: SorobanMetricsResponse | null;
@@ -41,6 +42,17 @@ export function SorobanActivityChart({ soroban, error }: Props) {
       status={resolveChartStatus(samples, error)}
       emptyMessage="No Soroban smart contract invocations in the recent sample window. Classic Stellar operations are tracked above."
       errorMessage="Could not load Soroban metrics."
+      summary={joinSummary(
+        `${invocationsPerSec} invocations per second, ${recentTotal} in the sample window.`,
+        describeSeries(
+          "Successful invocations",
+          chartData.map((d) => d.successful),
+        ),
+        describeSeries(
+          "Failed invocations",
+          chartData.map((d) => d.failed),
+        ),
+      )}
       subtitle={
         <p className="soroban-card__subtitle">
           Smart contract activity (<code>invoke_host_function</code>) separated from classic Stellar ops
@@ -58,7 +70,7 @@ export function SorobanActivityChart({ soroban, error }: Props) {
       }
     >
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={chartData}>
+        <LineChart data={chartData} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
           <XAxis dataKey="name" tick={axisTick} stroke={axisStroke} minTickGap={25} />
           <YAxis
@@ -77,12 +89,19 @@ export function SorobanActivityChart({ soroban, error }: Props) {
             strokeWidth={2}
             dot={false}
           />
+          {/*
+            Dashed, and not only red. Green against red is a CIE76 distance of
+            12 under simulated protanopia on the light theme — effectively one
+            line. The dash pattern separates the two series without depending
+            on hue at all.
+          */}
           <Line
             type="monotone"
             dataKey="failed"
             name="Failed Invocations"
             stroke="var(--bad-color)"
             strokeWidth={2}
+            strokeDasharray="5 3"
             dot={false}
           />
         </LineChart>

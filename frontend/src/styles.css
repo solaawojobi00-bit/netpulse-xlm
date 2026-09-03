@@ -22,6 +22,8 @@
 
   --accent-tint-bg: rgba(77, 163, 255, 0.12);
   --accent-tint-border: rgba(77, 163, 255, 0.3);
+  --good-tint-bg: rgba(62, 207, 142, 0.12);
+  --good-tint-border: rgba(62, 207, 142, 0.35);
   --warn-tint-bg: rgba(245, 185, 66, 0.12);
   --warn-tint-border: rgba(245, 185, 66, 0.4);
   --bad-tint-bg: rgba(245, 97, 92, 0.14);
@@ -50,6 +52,8 @@
 
   --accent-tint-bg: rgba(26, 99, 210, 0.08);
   --accent-tint-border: rgba(26, 99, 210, 0.25);
+  --good-tint-bg: rgba(19, 122, 71, 0.08);
+  --good-tint-border: rgba(19, 122, 71, 0.28);
   --warn-tint-bg: rgba(138, 92, 0, 0.08);
   --warn-tint-border: rgba(138, 92, 0, 0.28);
   --bad-tint-bg: rgba(194, 47, 40, 0.07);
@@ -60,6 +64,61 @@
 
 * {
   box-sizing: border-box;
+}
+
+/*
+ * Available to assistive technology, absent from the visual layout. Used for
+ * the section headings that keep the heading outline unbroken, and for the
+ * chart descriptions that give a screen reader something to read where the
+ * SVG offers nothing.
+ *
+ * `clip-path` rather than `display: none` or `visibility: hidden`, both of
+ * which remove the element from the accessibility tree entirely.
+ */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * Nothing suppressed the default outline, but the UA default is a thin dark
+ * ring that all but disappears on the dark palette's near-black background.
+ * An explicit accent ring is legible on both themes.
+ *
+ * `:focus-visible` rather than `:focus`, so clicking a button does not leave a
+ * ring behind while keyboard focus still gets one.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * The skeleton pulse is decorative and runs indefinitely while data is
+ * loading, which is exactly the kind of motion WCAG 2.3.3 asks to respect a
+ * preference about. The skeleton stays visible; only the animation stops.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .stat-tile__skeleton,
+  .chart-skeleton__bar {
+    opacity: 0.6;
+  }
 }
 
 body {
@@ -118,10 +177,18 @@ body {
   color: var(--text-color);
 }
 
+/*
+ * The selected network was previously marked by `background: var(--border-color)`
+ * over `var(--surface-color)` — 1.3:1, so which network you were looking at was
+ * conveyed almost entirely by a font-weight bump. The accent tint and accent
+ * text clear the 3:1 that WCAG 1.4.11 asks of a state indicator, and the inset
+ * ring gives the state a shape as well as a colour.
+ */
 .network-selector__btn--active {
-  background: var(--border-color);
-  color: var(--text-color);
+  background: var(--accent-tint-bg);
+  color: var(--accent-color);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent-color);
 }
 
 .network-badge {
@@ -292,6 +359,56 @@ body {
 
 .stat-tile--bad .stat-tile__value {
   color: var(--bad-color);
+}
+
+/*
+ * The congestion band used to reach the eye as a colour on the value plus a
+ * bare lowercase word in muted grey. The chip gives the band a shape as well
+ * as a hue — ● low, ▲ moderate, ■ high — so severity survives both a
+ * monochrome rendering and the common colour-vision deficiencies. The glyph is
+ * aria-hidden; the word beside it is the accessible text.
+ */
+.stat-tile__band {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.stat-tile__band-glyph {
+  font-size: 0.7em;
+  line-height: 1;
+}
+
+/*
+ * Solid borders in the tone's own colour rather than its tint. The tints
+ * measure ~1.5:1 against the card, which is below the 3:1 that a status
+ * boundary should clear if anyone is to rely on it.
+ */
+.stat-tile--good .stat-tile__band {
+  color: var(--good-color);
+  border-color: var(--good-color);
+  background: var(--good-tint-bg);
+}
+
+.stat-tile--warn .stat-tile__band {
+  color: var(--warn-color);
+  border-color: var(--warn-color);
+  background: var(--warn-tint-bg);
+}
+
+.stat-tile--bad .stat-tile__band {
+  color: var(--bad-color);
+  border-color: var(--bad-color);
+  background: var(--bad-tint-bg);
 }
 
 .stat-tile__skeleton {

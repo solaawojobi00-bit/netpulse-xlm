@@ -40,6 +40,18 @@ interface ChartCardProps {
   headerExtra?: ReactNode;
   subtitle?: ReactNode;
   className?: string;
+  /**
+   * Sentence describing the plotted data, including its current values. It
+   * becomes the chart's accessible name, and it is the only thing a screen
+   * reader gets from a chart — the SVG beneath conveys nothing. Build it with
+   * the helpers in `chartSummary.ts` rather than by hand.
+   */
+  summary?: string | null;
+  /**
+   * Heading level for the card title. Chart cards sit under a section heading,
+   * so h3 is right in the default layout; HistoryView nests them one deeper.
+   */
+  titleLevel?: 3 | 4;
 }
 
 /**
@@ -58,22 +70,36 @@ export function ChartCard({
   headerExtra,
   subtitle,
   className = "",
+  summary,
+  titleLevel = 3,
 }: ChartCardProps) {
+  const Heading = titleLevel === 4 ? "h4" : "h3";
+
   return (
     <div className={`chart-card ${className}`.trim()}>
       {headerExtra || subtitle ? (
         <div className="chart-card__header">
           <div>
-            <h3>{title}</h3>
+            <Heading>{title}</Heading>
             {subtitle}
           </div>
           {headerExtra}
         </div>
       ) : (
-        <h3>{title}</h3>
+        <Heading>{title}</Heading>
       )}
 
-      {status === "ready" && children}
+      {/*
+       * `role="img"` collapses the SVG's hundreds of meaningless <path>
+       * children into a single node named by the summary, which is both what a
+       * screen reader can act on and far less noisy than letting it walk the
+       * chart internals. Without this the whole card announces as nothing.
+       */}
+      {status === "ready" && (
+        <div role="img" aria-label={summary ? `${title}. ${summary}` : title}>
+          {children}
+        </div>
+      )}
 
       {status === "loading" && (
         <div className="chart-card__state" role="status" aria-label={`${title}: loading`}>

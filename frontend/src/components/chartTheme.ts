@@ -6,6 +6,17 @@
  * properties is what lets a data-theme swap re-theme the charts.
  */
 
+/*
+ * Recharts puts `tabindex="0"` on every chart <svg>. Inside ChartCard's
+ * `role="img"` wrapper that subtree is presentational, so each of those tab
+ * stops lands a keyboard user on a node that announces nothing — eight dead
+ * stops in a row between the theme toggle and anything actionable.
+ *
+ * The wrapper's summary is the accessible equivalent of the chart, so the
+ * surface itself should not be focusable. Spread this onto every chart root.
+ */
+export const chartA11y = { tabIndex: -1 } as const;
+
 export const axisTick = { fontSize: 10, fill: "var(--text-muted)" };
 
 export const axisStroke = "var(--border-color)";

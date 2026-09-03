@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import type { HistoryPoint } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, tooltipProps } from "./chartTheme";
+import { describeSeries } from "./chartSummary";
+import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
 
 interface Props {
   /** null until the first history fetch resolves. */
@@ -51,9 +52,9 @@ export function HistoryView({ points, range = "24h", error }: Props) {
    */
   if (status !== "ready") {
     return (
-      <section className="history-section">
+      <section className="history-section" aria-labelledby="history-heading">
         <div className="history-section__header">
-          <h2>{range} Historical Trends</h2>
+          <h2 id="history-heading">{range} Historical Trends</h2>
           <span className="history-badge">Persistent Storage · 5m Aggregation</span>
         </div>
         <ChartCard
@@ -69,10 +70,10 @@ export function HistoryView({ points, range = "24h", error }: Props) {
   }
 
   return (
-    <section className="history-section">
+    <section className="history-section" aria-labelledby="history-heading">
       <div className="history-section__header">
         <div>
-          <h2>{range} Historical Trends</h2>
+          <h2 id="history-heading">{range} Historical Trends</h2>
           <p className="history-section__subtitle">
             Coarser historical trend view aggregated from persistent SQLite storage
           </p>
@@ -86,9 +87,14 @@ export function HistoryView({ points, range = "24h", error }: Props) {
           status={status}
           emptyMessage={emptyMessage}
           errorMessage={errorMessage}
+          summary={describeSeries(
+            "Average ledger close time",
+            chartData.map((d) => d.closeTimeSeconds),
+            "seconds",
+          )}
         >
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData}>
+            <LineChart data={chartData} {...chartA11y}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
               <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
               <YAxis tick={axisTick} stroke={axisStroke} width={35} />
@@ -110,9 +116,14 @@ export function HistoryView({ points, range = "24h", error }: Props) {
           status={status}
           emptyMessage={emptyMessage}
           errorMessage={errorMessage}
+          summary={describeSeries(
+            "Average capacity usage",
+            chartData.map((d) => d.congestionPercent),
+            "percent",
+          )}
         >
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData}>
+            <LineChart data={chartData} {...chartA11y}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
               <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
               <YAxis

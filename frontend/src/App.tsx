@@ -82,10 +82,17 @@ export function App() {
         <div className="app__header-top">
           <div className="app__header-brand">
             <h1>NetPulse</h1>
+            {/*
+              `aria-pressed` is the point here: the selected network was
+              previously conveyed only by a background tint and a heavier font,
+              neither of which reaches assistive technology, so a screen reader
+              user could not tell which network they were looking at.
+            */}
             <div className="network-selector" role="group" aria-label="Stellar Network">
               <button
                 type="button"
                 className={`network-selector__btn ${network === "mainnet" ? "network-selector__btn--active" : ""}`}
+                aria-pressed={network === "mainnet"}
                 onClick={() => setNetwork("mainnet")}
               >
                 Mainnet
@@ -93,6 +100,7 @@ export function App() {
               <button
                 type="button"
                 className={`network-selector__btn ${network === "testnet" ? "network-selector__btn--active" : ""}`}
+                aria-pressed={network === "testnet"}
                 onClick={() => setNetwork("testnet")}
               >
                 Testnet
@@ -117,88 +125,122 @@ export function App() {
         boundary by network clears a stale fallback when the visitor switches
         away from the network whose data caused it.
       */}
-      <ErrorBoundary key={network}>
-        {health?.congestion.band === "high" && (
-          <div className="banner banner--danger">
-            <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
-            {formatPercent(health.congestion.ledgerCapacityUsage)}
-            {health.congestion.alertThreshold !== undefined &&
-              ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
-            . Transactions may experience surge pricing or delayed inclusion.
-          </div>
-        )}
+      <main className="app__main">
+        <ErrorBoundary key={network}>
+          {/*
+            Both banners are polite, not assertive. They appear and disappear as
+            the backend recovers, and on a dashboard that reconnects on its own
+            an assertive region would interrupt whatever the user is reading
+            every time the network flaps. Polite queues the announcement instead
+            of cutting in, which is the right trade for information that is
+            about the page rather than about something the user just did.
 
-        {(isStale || error) && (
-          <div className="banner banner--warn">
-            {error
-              ? "Unable to reach the NetPulse backend. Retrying…"
-              : `Data may be stale — backend hasn't refreshed from Horizon in a while.`}
-          </div>
-        )}
-
-        <section className="stat-grid">
-          <StatTile
-            label="Ledger close time"
-            value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
-            sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
-            loading={isLoading}
-          />
-          <StatTile
-            label="Base fee"
-            value={formatStroops(health?.fees.baseFeeStroops ?? null)}
-            loading={isLoading}
-          />
-          <StatTile
-            label="Network congestion"
-            value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
-            sublabel={health?.congestion.band ?? "unknown"}
-            tone={congestionTone[health?.congestion.band ?? "unknown"]}
-            loading={isLoading}
-          />
-          <StatTile
-            label="Throughput"
-            value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
-            sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
-            loading={isLoading}
-          />
-          <StatTile
-            label="Soroban smart contracts"
-            value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
-            sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
-            loading={isLoading}
-          />
-        </section>
-
-        {/*
-          Nulls are passed through rather than collapsed with `?? []`: that is
-          the only thing distinguishing "not loaded yet" from "loaded and
-          genuinely empty" by the time data reaches a chart.
-
-          The six live charts share `error` from the WebSocket subscription;
-          history carries its own, so one failing source cannot blank the
-          other.
-        */}
-        <section className="chart-grid">
-          <LedgerCloseTimeChart ledgers={ledgers} error={error} />
-          <OperationCountChart ledgers={ledgers} error={error} />
-          <TransactionSuccessChart ledgers={ledgers} error={error} />
-          <FeePercentileChart fees={health?.fees ?? null} error={error} />
-          <FeeSpreadTrendChart snapshots={feeSnapshots} error={error} />
-          <SorobanActivityChart soroban={soroban} error={error} />
-        </section>
-
-        <HistoryView points={historyPoints} range="24h" error={historyError} />
-
-        <footer className="app__footer">
-          {health && (
-            <SyncStatus
-              lastUpdated={health.lastUpdated}
-              secondsSinceLastUpdate={health.secondsSinceLastUpdate}
-              status={health.status}
-            />
+            This is the same reasoning as the per-chart error states from #48:
+            announce once, politely, and let the visible text carry the detail.
+          */}
+          {health?.congestion.band === "high" && (
+            <div className="banner banner--danger" role="status">
+              <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
+              {formatPercent(health.congestion.ledgerCapacityUsage)}
+              {health.congestion.alertThreshold !== undefined &&
+                ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
+              . Transactions may experience surge pricing or delayed inclusion.
+            </div>
           )}
-        </footer>
-      </ErrorBoundary>
+
+          {(isStale || error) && (
+            <div className="banner banner--warn" role="status">
+              {error
+                ? "Unable to reach the NetPulse backend. Retrying…"
+                : `Data may be stale — backend hasn't refreshed from Horizon in a while.`}
+            </div>
+          )}
+
+          {/*
+            The heading outline ran h1 -> h3, skipping a level, because the two
+            grids had no heading of their own. These name the sections for
+            anyone navigating by heading without changing the visual design,
+            which has no room for them.
+          */}
+          <section className="stat-grid" aria-labelledby="current-status-heading">
+            <h2 id="current-status-heading" className="visually-hidden">
+              Current network status
+            </h2>
+            <StatTile
+              label="Ledger close time"
+              value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
+              sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
+              loading={isLoading}
+            />
+            <StatTile
+              label="Base fee"
+              value={formatStroops(health?.fees.baseFeeStroops ?? null)}
+              loading={isLoading}
+            />
+            {/*
+              The band moves from `sublabel` to `band`, which renders it as a
+              chip carrying a severity glyph. Previously the only cue that this
+              tile meant anything worse than "fine" was the colour of its value.
+            */}
+            <StatTile
+              label="Network congestion"
+              value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
+              band={health?.congestion.band ?? "unknown"}
+              tone={congestionTone[health?.congestion.band ?? "unknown"]}
+              loading={isLoading}
+            />
+            <StatTile
+              label="Throughput"
+              value={`${formatRate(health?.throughput.operationsPerSecond ?? null)} ops/s`}
+              sublabel={`${formatRate(health?.throughput.transactionsPerSecond ?? null)} txs/s`}
+              loading={isLoading}
+            />
+            <StatTile
+              label="Soroban smart contracts"
+              value={`${soroban?.invocationsPerSecond ?? 0} inv/s`}
+              sublabel={`${soroban?.recentInvocationsTotal ?? 0} recent invocations`}
+              loading={isLoading}
+            />
+          </section>
+
+          {/*
+            Nulls are passed through rather than collapsed with `?? []`: that is
+            the only thing distinguishing "not loaded yet" from "loaded and
+            genuinely empty" by the time data reaches a chart.
+
+            The six live charts share `error` from the WebSocket subscription;
+            history carries its own, so one failing source cannot blank the
+            other.
+          */}
+          <section className="chart-grid" aria-labelledby="live-charts-heading">
+            <h2 id="live-charts-heading" className="visually-hidden">
+              Live network charts
+            </h2>
+            <LedgerCloseTimeChart ledgers={ledgers} error={error} />
+            <OperationCountChart ledgers={ledgers} error={error} />
+            <TransactionSuccessChart ledgers={ledgers} error={error} />
+            <FeePercentileChart fees={health?.fees ?? null} error={error} />
+            <FeeSpreadTrendChart snapshots={feeSnapshots} error={error} />
+            <SorobanActivityChart soroban={soroban} error={error} />
+          </section>
+
+          <HistoryView points={historyPoints} range="24h" error={historyError} />
+        </ErrorBoundary>
+      </main>
+
+      {/*
+        Outside <main>, so it is a page-level contentinfo landmark rather than
+        content nested inside the main region.
+      */}
+      <footer className="app__footer">
+        {health && (
+          <SyncStatus
+            lastUpdated={health.lastUpdated}
+            secondsSinceLastUpdate={health.secondsSinceLastUpdate}
+            status={health.status}
+          />
+        )}
+      </footer>
     </div>
   );
 }
