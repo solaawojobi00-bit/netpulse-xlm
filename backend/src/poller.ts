@@ -5,6 +5,7 @@ import {
   fetchRecentOperations,
   type Network,
 } from "./horizon.js";
+import { evaluateCongestionAlert } from "./alerts.js";
 import { logger } from "./logger.js";
 import type {
   FeeSnapshot,
@@ -97,6 +98,13 @@ export class RollingStore {
   private lastSuccessAt: Date | null = null;
   private lastErrorMessage: string | null = null;
 
+  /*
+   * Which network this store holds. Needed so congestion alerting can be keyed
+   * per network from inside the store, rather than every call site having to
+   * remember to pass it along.
+   */
+  constructor(private readonly network: Network) {}
+
   setLedgers(fresh: LedgerSample[]): void {
     const bySequence = new Map<number, LedgerSample>();
     for (const sample of [...this.ledgers, ...fresh]) {
@@ -107,11 +115,32 @@ export class RollingStore {
       .slice(-MAX_LEDGERS);
   }
 
+  /*
+   * Every fresh fee snapshot is a new congestion reading, and there are three
+   * places one arrives — the polling path, the streaming path, and the stream
+   * warm-up. Hanging the check on the store rather than on each of those is
+   * what stops a future fourth call site from silently skipping alerting.
+   *
+   * Deliberately not awaited: the state transition inside is synchronous, so
+   * it is already recorded when this returns, and a webhook that takes seconds
+   * to answer cannot delay a poll. Delivery failures are logged and swallowed
+   * inside, so there is nothing here for a rejection handler to do — but one
+   * is attached anyway, because an unhandled rejection would take the process
+   * down and a dead webhook must never do that.
+   */
   addFeeSnapshot(snapshot: FeeSnapshot): void {
     this.feeSnapshots.push(snapshot);
     if (this.feeSnapshots.length > MAX_FEE_SNAPSHOTS) {
       this.feeSnapshots.shift();
     }
+
+    void evaluateCongestionAlert(this.network, snapshot.ledgerCapacityUsage).catch((err) => {
+      logger.warn("Congestion alert evaluation failed", {
+        component: "alerts",
+        network: this.network,
+        err,
+      });
+    });
   }
 
   addSorobanSample(sample: SorobanSample): void {
@@ -181,8 +210,8 @@ export class RollingStore {
 }
 
 export const stores: Record<Network, RollingStore> = {
-  mainnet: new RollingStore(),
-  testnet: new RollingStore(),
+  mainnet: new RollingStore("mainnet"),
+  testnet: new RollingStore("testnet"),
 };
 
 export const store = stores.mainnet;

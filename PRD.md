@@ -77,9 +77,11 @@ stays legible alongside what actually shipped.
   *Still out of scope.*
 - **Alerting/notifications** (email, webhook, Discord/Slack pings on
   thresholds). Flagged as a Phase 2+ issue.
-  *Still open — tracked as a Phase 2+ issue.* v1's
-  `CONGESTION_ALERT_THRESHOLD` drives an in-dashboard banner only; no
-  outbound notification is sent.
+  *Shipped since v1 (#41):* crossing `CONGESTION_ALERT_THRESHOLD` now POSTs
+  to a configured webhook, with generic, Discord and Slack body formats, and
+  sends a recovery notification when the network drops back below. Off unless
+  `ALERT_WEBHOOK_URL` is set — see `backend/.env.example`. Email remains out
+  of scope.
 - **Authentication, user accounts, saved preferences, multi-tenant
   dashboards.**
   *Still out of scope.*
