@@ -4,7 +4,12 @@ import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
 import { historyExportFilename, historyToCsv } from "./csv.js";
 import { db } from "./db.js";
-import { buildSorobanResponse, startPolling, stores } from "./poller.js";
+import {
+  buildOperationBreakdownResponse,
+  buildSorobanResponse,
+  startPolling,
+  stores,
+} from "./poller.js";
 import { logger } from "./logger.js";
 import { allowedOrigins, allowsAnyOrigin } from "./origins.js";
 import { DEFAULT_SHUTDOWN_TIMEOUT_MS, createShutdownRunner } from "./shutdown.js";
@@ -90,6 +95,17 @@ export function createApp(): express.Express {
   app.get("/api/soroban", (req, res) => {
     const network = parseNetwork(req);
     res.json(buildSorobanResponse(network));
+  });
+
+  /*
+   * A separate route rather than an addition to /api/soroban: that response is
+   * specifically about contract invocations, and the breakdown is about all
+   * operation types. Folding one into the other would make /api/soroban a
+   * grab-bag named after only part of what it returns.
+   */
+  app.get("/api/operations/breakdown", (req, res) => {
+    const network = parseNetwork(req);
+    res.json(buildOperationBreakdownResponse(network));
   });
 
   return app;

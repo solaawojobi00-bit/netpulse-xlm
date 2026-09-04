@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { ChartStatus } from "./resolveStatus";
 
 /*
@@ -33,6 +33,12 @@ interface ChartCardProps {
    * so h3 is right in the default layout; HistoryView nests them one deeper.
    */
   titleLevel?: 3 | 4;
+  /**
+   * Pixel height of the chart, and therefore of the loading, empty and error
+   * boxes that stand in for it. They are one number precisely so a card cannot
+   * change size between states — pass the same value to the chart itself.
+   */
+  height?: number;
 }
 
 /**
@@ -53,11 +59,15 @@ export function ChartCard({
   className = "",
   summary,
   titleLevel = 3,
+  height = 200,
 }: ChartCardProps) {
   const Heading = titleLevel === 4 ? "h4" : "h3";
 
   return (
-    <div className={`chart-card ${className}`.trim()}>
+    <div
+      className={`chart-card ${className}`.trim()}
+      style={{ "--chart-state-height": `${height}px` } as CSSProperties}
+    >
       {headerExtra || subtitle ? (
         <div className="chart-card__header">
           <div>

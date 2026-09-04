@@ -119,6 +119,37 @@ export interface SorobanSample {
   failedCount: number;
 }
 
+export interface OperationTypeCount {
+  /**
+   * The raw Horizon type string, or the grouping bucket. Never match on this
+   * to detect the bucket — read `isOther`, which cannot collide with a real
+   * type Horizon might introduce.
+   */
+  type: string;
+  count: number;
+  /** Fraction of `totalOperations`, 0-1. */
+  share: number;
+  isOther: boolean;
+}
+
+export interface OperationBreakdownResponse {
+  network: string;
+  sampleCount: number;
+  /** Seconds spanned by the samples; null with fewer than two. */
+  windowSeconds: number | null;
+  totalOperations: number;
+  distinctTypes: number;
+  breakdown: OperationTypeCount[];
+}
+
+export async function fetchOperationBreakdown(
+  network: Network = "mainnet",
+): Promise<OperationBreakdownResponse> {
+  const res = await fetch(`/api/operations/breakdown?network=${network}`);
+  if (!res.ok) throw new Error(`GET /api/operations/breakdown failed: ${res.status}`);
+  return (await res.json()) as OperationBreakdownResponse;
+}
+
 export interface SorobanMetricsResponse {
   network: string;
   invocationsPerSecond: number | null;

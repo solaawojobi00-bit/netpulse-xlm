@@ -5,6 +5,7 @@ import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
 import { HistoryView } from "./components/HistoryView";
 import { LedgerCloseTimeChart } from "./components/LedgerCloseTimeChart";
 import { OperationCountChart } from "./components/OperationCountChart";
+import { OperationTypeChart } from "./components/OperationTypeChart";
 import { SorobanActivityChart } from "./components/SorobanActivityChart";
 import { resolveValueStatus } from "./components/resolveStatus";
 import { SegmentedControl } from "./components/SegmentedControl";
@@ -59,7 +60,8 @@ export function App() {
   const [network, setNetwork] = useQueryParam<Network>("network", NETWORKS, "mainnet");
   const [range, setRange] = useQueryParam<HistoryRange>("range", HISTORY_RANGES, "24h");
   const { theme, toggleTheme } = useTheme();
-  const { health, ledgers, feeSnapshots, soroban, error } = useSubscription(network);
+  const { health, ledgers, feeSnapshots, soroban, operationBreakdown, error } =
+    useSubscription(network);
   // null until the first fetch resolves, so HistoryView can tell "still
   // loading" apart from "loaded and empty".
   const [historyPoints, setHistoryPoints] = useState<HistoryPoint[] | null>(null);
@@ -241,6 +243,7 @@ export function App() {
             <FeePercentileChart fees={health?.fees ?? null} error={error} />
             <FeeSpreadTrendChart snapshots={feeSnapshots} error={error} />
             <SorobanActivityChart soroban={soroban} error={error} />
+            <OperationTypeChart breakdown={operationBreakdown} error={error} />
           </section>
 
           <HistoryView

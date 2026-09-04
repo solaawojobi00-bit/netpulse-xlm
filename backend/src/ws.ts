@@ -4,7 +4,12 @@ import type { Network } from "./horizon.js";
 import { logger } from "./logger.js";
 import { buildHealthResponse } from "./metrics.js";
 import { isOriginAllowed } from "./origins.js";
-import { buildSorobanResponse, onStoreUpdate, stores } from "./poller.js";
+import {
+  buildOperationBreakdownResponse,
+  buildSorobanResponse,
+  onStoreUpdate,
+  stores,
+} from "./poller.js";
 
 const WS_PATH = "/ws";
 
@@ -63,6 +68,7 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
           ledgers: store.getLedgers(),
           fees: store.getFeeSnapshots(),
           soroban: buildSorobanResponse(network),
+          operationBreakdown: buildOperationBreakdownResponse(network),
         }),
       );
     }
