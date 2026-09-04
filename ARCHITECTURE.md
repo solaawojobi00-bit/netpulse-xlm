@@ -111,12 +111,15 @@ Backend ingestion (persistent SSE stream + ~6s interval for the polled endpoints
         │  - notifies subscribers on every store update
         ├──────────────────────────────┐
         ▼                              ▼
-Express REST API              WebSocket /ws
-  GET /api/health               - one channel, fanned out to all clients
-  GET /api/ledgers/recent       - pushes a snapshot on every store update
-  GET /api/fees/recent          - client picks its network via a
-  GET /api/soroban                subscribe / setNetwork message
+Express REST API                      WebSocket /ws
+  GET /healthz  (liveness only)         - one channel, fanned out to all clients
+  GET /api/health                       - pushes a snapshot on every store update
+  GET /api/ledgers/recent               - client picks its network via a
+  GET /api/fees/recent                    subscribe / setNetwork message
+  GET /api/soroban
+  GET /api/operations/breakdown
   GET /api/history  (SQLite-backed, 5-min buckets)
+  -> full reference: docs/API.md
         │                              │
         └──────────────┬───────────────┘
                        ▼
