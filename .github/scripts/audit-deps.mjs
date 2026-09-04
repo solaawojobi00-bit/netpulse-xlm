@@ -26,6 +26,13 @@ const BLOCKING_SEVERITIES = ["high", "critical"];
 const ATTEMPTS = 2;
 const RETRY_DELAY_MS = 10_000;
 
+/*
+ * Ceiling on a single npm audit request. The whole step is therefore bounded
+ * at roughly ATTEMPTS * FETCH_TIMEOUT_MS + RETRY_DELAY_MS, about 70s, versus
+ * the 9-11 minutes the unbounded default produced against a dead endpoint.
+ */
+const FETCH_TIMEOUT_MS = 30_000;
+
 const [workspace, ...extraArgs] = process.argv.slice(2);
 
 if (!workspace) {
@@ -55,10 +62,23 @@ function runAudit() {
     [
       "audit",
       "--json",
-      // npm's own backoff against a failing endpoint is what turned these
-      // jobs into 9-minute waits. Cap it so a bad registry day costs seconds.
-      "--fetch-retries=2",
-      "--fetch-retry-maxtimeout=20000",
+      /*
+       * Bound how long one attempt can take. Two separate npm settings matter
+       * here, and capping only the second is a trap:
+       *
+       *   fetch-timeout   how long a single request may hang. Defaults to
+       *                   300000 (5 min), which is the setting that actually
+       *                   produced the multi-minute jobs, because a dead
+       *                   endpoint times out rather than answering.
+       *   fetch-retries   how many times npm retries internally, with its own
+       *                   backoff on top of the above.
+       *
+       * Retrying is this script's job, not npm's, so npm gets one shot with a
+       * short leash and the retry lives in the loop below where it is visible.
+       * Worst case per attempt is FETCH_TIMEOUT_MS.
+       */
+      "--fetch-retries=0",
+      `--fetch-timeout=${FETCH_TIMEOUT_MS}`,
       ...extraArgs,
     ],
     {
@@ -92,26 +112,43 @@ function runAudit() {
     return { report };
   }
 
-  // Two shapes mean "the endpoint did not answer", and only these two may be
-  // downgraded to a warning:
-  //   npm 11: the raw HTTP failure, identified by an HTTP status and no code
-  //   npm 10: an `error` whose code is ENOAUDIT
-  // Every other npm error code is a real problem with the run itself --
-  // ENOLOCK for a missing lockfile, EUSAGE for a bad invocation -- and must
-  // fail. Treating those as outages is how a gate silently stops gating.
-  if (typeof report.statusCode === "number" && !report.error?.code) {
-    return { unavailable: report.message ?? `HTTP ${report.statusCode} from ${report.uri}` };
+  /*
+   * Classify what npm gave us instead of a report. The discriminator is
+   * `error.code`, because npm's own CLI failures always carry one while a
+   * failed audit *request* does not:
+   *
+   *   ENOAUDIT              npm 10's code for "the endpoint did not answer"
+   *   any other code        a real problem with this run -- ENOLOCK for a
+   *                         missing lockfile, EUSAGE for a bad invocation --
+   *                         which must fail. Treating these as outages is how
+   *                         a gate silently stops gating.
+   *   no code, but a
+   *   top-level `message`   npm 11's raw transport failure. Comes in two
+   *                         sub-shapes and both must be caught: an HTTP error
+   *                         carries statusCode/uri/body, while a timeout
+   *                         carries only `message`. Keying on statusCode
+   *                         alone would hard-fail every timeout.
+   */
+  const code = report.error?.code;
+
+  if (code === "ENOAUDIT") {
+    return { unavailable: `ENOAUDIT: ${report.error.summary ?? ""}`.trim() };
   }
 
-  if (report.error?.code === "ENOAUDIT") {
-    return { unavailable: `ENOAUDIT: ${report.error.summary ?? ""}`.trim() };
+  if (code) {
+    return {
+      fatal: `npm audit failed with ${code}: ${report.error.summary ?? ""}`.trim(),
+    };
+  }
+
+  if (typeof report.message === "string" && report.message.length > 0) {
+    return { unavailable: report.message };
   }
 
   return {
     fatal:
-      report.error?.code
-        ? `npm audit failed with ${report.error.code}: ${report.error.summary ?? ""}`.trim()
-        : `unrecognised npm audit output (exit ${result.status})\n${result.stdout}\n${result.stderr}`,
+      `unrecognised npm audit output (exit ${result.status})\n` +
+      `${result.stdout}\n${result.stderr}`,
   };
 }
 
