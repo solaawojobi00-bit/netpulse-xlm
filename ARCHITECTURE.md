@@ -108,7 +108,8 @@ Backend ingestion (persistent SSE stream + ~6s interval for the polled endpoints
         │  - appends to a capped in-memory rolling window, per network
         │  - writes ledgers + fee snapshots to SQLite (7-day retention)
         │  - reconnects with exponential backoff (1s → 30s cap), resuming
-        │    from the last paging-token cursor so no ledger is missed
+        │    from its cursor — see the SSE section above and issue #84;
+        │    resumption is not currently gap-free
         │  - tracks last-successful-update timestamp for staleness detection
         │  - notifies subscribers on every store update
         ├──────────────────────────────┐
