@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -24,9 +24,10 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      # Not a bare `npm audit`: that exits 1 both for real advisories and for
+      # registry outages. See .github/scripts/audit-deps.mjs.
       - name: Audit dependencies
-        working-directory: backend
-        run: npm audit --audit-level=high
+        run: node .github/scripts/audit-deps.mjs backend
 
       - name: Type-check
         working-directory: backend
@@ -46,7 +47,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -54,9 +55,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # Not a bare `npm audit`: that exits 1 both for real advisories and for
+      # registry outages. See .github/scripts/audit-deps.mjs.
       - name: Audit dependencies
-        working-directory: frontend
-        run: npm audit --audit-level=high --omit=dev
+        run: node .github/scripts/audit-deps.mjs frontend --omit=dev
 
       - name: Build and type-check
         working-directory: frontend
