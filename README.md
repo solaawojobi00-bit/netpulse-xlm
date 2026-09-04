@@ -12,6 +12,11 @@ See [PRD.md](./PRD.md) for scope and metrics, and
 [ARCHITECTURE.md](./ARCHITECTURE.md) for how data is fetched and how the
 dashboard stays live.
 
+Building against NetPulse? [docs/API.md](./docs/API.md) is the reference for
+all seven REST routes and the `/ws` WebSocket channel — response shapes, field
+descriptions, which fields are nullable and why, and the behaviours that are
+easy to get wrong.
+
 ## Status
 
 Phase 2. The Phase 1 MVP shipped and has since gained live Horizon SSE
@@ -154,14 +159,28 @@ inline JSON with no `Content-Disposition`.
 
 CSV has one row per bucket. `network` and `range` are repeated on every row so
 an exported file makes sense without the request that produced it, and empty
-fields mean no data for that bucket rather than zero:
+fields mean no usable value for that bucket:
 
 ```
 network,range,timestamp,closeTimeSeconds,congestionUsage,operations,transactions,p50Fee,p90Fee
 mainnet,24h,2026-09-02T22:10:00.000Z,5.58,0.6683,11371,6702,100,17734
 ```
 
+See [docs/API.md](./docs/API.md#export-formats) for the exact headers, RFC 4180
+quoting and CRLF details, and why a cross-origin browser client cannot read the
+download filename. Note that an empty field means "no data **or** a zero
+aggregate" — the two are not distinguishable, which
+[docs/API.md](./docs/API.md#reading-the-points-array-correctly) explains along
+with the other bucket behaviours (gaps are omitted rather than zero-filled, and
+the oldest bucket is usually partial).
+
 ## Health and Liveness Probes
 
 - `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**
 - `GET /api/health`: Network metrics endpoint returning current network conditions (ledger close times, fee statistics, congestion banding). Because this reflects upstream Horizon reachability and may report `status: "stale"` during external Horizon outages, it should **not** be used as a container liveness probe.
+
+A stale response is still **HTTP 200**, so staleness cannot be detected from
+the status code — see
+[docs/API.md](./docs/API.md#what-makes-a-response-stale) for what exactly makes
+a response stale, how it relates to `secondsSinceLastUpdate`, and the full
+field-by-field reference.
