@@ -46,6 +46,34 @@ available settings and their defaults (including `LOG_LEVEL`, defaulting to `inf
 The backend writes its history database to `DATABASE_PATH` (default `./data/netpulse.db`),
 creating the directory on first run.
 
+## Congestion Alerting
+
+Set `ALERT_WEBHOOK_URL` and the backend POSTs when a network's ledger capacity
+usage crosses `CONGESTION_ALERT_THRESHOLD`, and again when it recovers. Leave
+it unset and nothing changes — alerting is off by default and no other
+behaviour depends on it.
+
+`ALERT_WEBHOOK_FORMAT` picks the body shape: `generic` (default), `discord`,
+or `slack`. Discord and Slack both reject bodies they do not recognise, so
+this has to match whatever the URL points at.
+
+Alerts are **edge-triggered**: one notification when a network crosses into
+the alerting state, not one per poll while it stays there. Two independent
+guards keep a busy network from flooding a channel:
+
+- **Hysteresis** (`ALERT_HYSTERESIS`, default `0.05`) — the alert clears only
+  once usage falls below `threshold - hysteresis`. A reading flickering either
+  side of the threshold alerts once, not on every poll.
+- **Cooldown** (`ALERT_COOLDOWN_MS`, default 15 minutes) — a floor on the time
+  between alerts for one network, covering the case hysteresis cannot: a value
+  swinging widely across both lines.
+
+A recovery that closes a delivered alert is never suppressed, so an alert
+channel is not left showing a problem that has already passed. State is kept
+per network, so a mainnet episode neither triggers nor suppresses a testnet
+one. Delivery failures are logged and swallowed — a dead webhook cannot stop
+metric collection or take the dashboard down.
+
 ## Graceful Shutdown
 
 `SIGTERM` and `SIGINT` both start the same shutdown sequence, so the backend
