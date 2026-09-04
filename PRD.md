@@ -59,6 +59,19 @@ window:
    trending up, down, or flat, independent of the instantaneous
    throughput number.
 
+### Added since v1
+
+Metrics that were not part of the original five, recorded here so this
+section stays a complete list of what the dashboard actually shows:
+
+6. **Operation type breakdown** *(#46)* — the mix of Horizon operation types
+   across recent polls, from the `/operations` fetch that already fed the
+   Soroban metrics. The top types are listed by share with the long tail
+   grouped, so a developer can see *what kind* of activity is driving the
+   operation count rather than only how much of it there is. A rolling
+   sample of recent polls rather than a network-wide total, and labelled as
+   such in the UI.
+
 ## Out of Scope for v1
 
 This section records what v1 was deliberately scoped *out* of, and why.
