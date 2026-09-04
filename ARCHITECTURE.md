@@ -36,10 +36,11 @@ Futurenet remains unsupported.
 As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horizon SSE streaming, periodic fee snapshot polling, and WebSocket push fan-out to clients:
 
 - **Single Backend Ingestion Stream:** The backend maintains a single long-lived Server-Sent Events (`Accept: text/event-stream`) connection to Horizon's `/ledgers` endpoint.
-  - Reconnect-with-exponential-backoff is handled automatically on disconnections, resuming from the latest paging token cursor to prevent gaps or duplicate processing.
+  - Reconnect-with-exponential-backoff is handled automatically on disconnections, advancing a cursor as records arrive so the stream resumes roughly where it left off.
+  - **The cursor handling is currently buggy — see [#84](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/84).** The loop advances the cursor from each record's `paging_token`, but the *initial* cursor is seeded with a raw ledger `sequence`, which is not the same kind of identifier. In practice a freshly started backend has been observed ingesting ledgers from months earlier alongside current ones. So resumption is not currently gap-free or duplicate-free, and this section should not be read as a guarantee that it is. Ledger rows are keyed on `(network, sequence)` with `INSERT OR REPLACE`, so redelivery is at least idempotent in SQLite.
   - Because Horizon does not offer SSE streaming on `/fee_stats`, the backend continues to poll `/fee_stats` on a configurable interval.
 - **WebSocket Broadcast Fan-out:** Instead of multiple browser tabs opening individual SSE connections to public Horizon, the backend terminates the Horizon stream and broadcasts updates over a single WebSocket channel (`/ws`) to all connected frontend clients.
-- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling (`/api/health`, `/api/ledgers/recent`, `/api/fees/recent`) if WebSocket connectivity is blocked or unavailable.
+- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` is fetched separately on its own interval in both modes.
 - **Backward-Compatible REST APIs:** All REST endpoints remain active and continue to serve up-to-date in-memory metrics for external scripts, health probes, and test harnesses.
 
 ## Stack
@@ -48,8 +49,9 @@ As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horiz
 - Single long-running process ingests from Horizon (SSE stream for
   ledgers, interval polling for `/fee_stats` and `/operations`),
   normalizes responses into the dashboard's own small data shape, and
-  keeps a rolling in-memory window per network (last ~50 ledgers, ~10
-  fee_stats snapshots, ~20 Soroban samples — a few KB).
+  keeps a rolling in-memory window per network (last 50 ledgers, 10
+  fee_stats snapshots, 20 Soroban samples, 20 operation-type samples — a
+  few KB).
 - Exposes a small REST API consumed by the frontend, plus a WebSocket
   channel for push updates. REST (not GraphQL/tRPC) because the API
   surface is tiny and fixed-shape — no query flexibility is needed.
@@ -135,9 +137,14 @@ Dashboard UI
         - Transaction success/failure ratio chart
         - Fee percentile chart + fee spread trend chart
         - Soroban invocation activity chart
-        - 24h history view (from SQLite)
+        - Operation type breakdown chart
+        - 24h history view (from SQLite), with CSV/JSON export
         - Congestion banner above the configured threshold
         - Staleness banner if the backend hasn't gotten fresh Horizon data
+        - Per-chart loading / empty / error states
+        - Light and dark theme, toggled in the header
+        - Network and history range reflected in the URL, so a view is
+          shareable and survives a reload
 ```
 
 The backend sits between the frontend and Horizon (rather than the
@@ -155,6 +162,16 @@ boundary without the frontend's data shapes changing.
 
 ```
 netpulse-xlm/
+├── .github/
+│   ├── scripts/
+│   │   └── audit-deps.mjs   npm audit wrapper: real advisories fail,
+│   │                        registry outages warn
+│   ├── workflows/
+│   │   ├── ci.yml           backend + frontend + secret scan
+│   │   └── codeql.yml       static analysis
+│   └── pull_request_template.md
+├── docs/
+│   └── API.md               REST + WebSocket reference for consumers
 ├── backend/
 │   ├── src/
 │   │   ├── index.ts       Express app entry point + route definitions
@@ -163,20 +180,33 @@ netpulse-xlm/
 │   │   ├── ws.ts          WebSocket server + snapshot fan-out
 │   │   ├── db.ts          SQLite persistence, retention, history buckets
 │   │   ├── metrics.ts     derives dashboard metrics from raw samples
+│   │   ├── alerts.ts      congestion threshold alerts + webhook delivery
+│   │   ├── csv.ts         history CSV serialisation for export
+│   │   ├── origins.ts     CORS/WebSocket origin allowlist parsing
+│   │   ├── shutdown.ts    graceful shutdown runner
+│   │   ├── logger.ts      structured logging
 │   │   ├── types.ts       shared types
-│   │   └── *.test.ts      Vitest suites (metrics, API integration)
+│   │   └── *.test.ts      Vitest suites (metrics, API integration,
+│   │                      alerts, docs drift guard)
 │   ├── .env.example
 │   ├── package.json
+│   ├── vitest.config.ts
 │   └── tsconfig.json
 └── frontend/
+    ├── scripts/
+    │   ├── contrast-audit.mjs     WCAG AA palette check (runs in CI)
+    │   └── a11y-browser-check.mjs manual browser a11y pass
     ├── src/
     │   ├── main.tsx
     │   ├── App.tsx
     │   ├── api.ts             typed fetch wrappers + response types
     │   ├── useSubscription.ts WebSocket subscription + REST fallback
     │   ├── usePolling.ts      interval polling hook (fallback path)
+    │   ├── useQueryParam.ts   URL-backed state (network, history range)
+    │   ├── useTheme.ts        light/dark theme preference
     │   ├── format.ts          number/duration formatting helpers
-    │   ├── components/        stat tiles + charts + history view
+    │   ├── components/        stat tiles, charts, history view,
+    │   │                      error boundary, theme toggle
     │   └── styles.css
     ├── index.html
     ├── vite.config.ts         dev proxy for /api and /ws

@@ -21,8 +21,14 @@ easy to get wrong.
 
 Phase 2. The Phase 1 MVP shipped and has since gained live Horizon SSE
 streaming with WebSocket push to the browser, mainnet/testnet selection,
-persistent history with a 24h trend view, Soroban contract activity
-metrics, and additional fee and transaction charts.
+persistent history with a 24h trend view and CSV/JSON export, Soroban
+contract activity metrics, an operation-type breakdown, and additional fee
+and transaction charts.
+
+Also since Phase 1: congestion alerting over a webhook, graceful shutdown,
+a light/dark theme, an accessibility pass across the charts and palette,
+per-chart loading and error states, and network and history range reflected
+in the URL so a view is shareable.
 
 See the open issues for the current backlog. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for local setup, branch conventions, running checks, and how to claim an issue.
