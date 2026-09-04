@@ -6,8 +6,11 @@ Thank you for your interest in contributing to NetPulse! This guide outlines how
 
 ## Prerequisites
 
-- **Node.js**: Version 20 LTS or higher (matching CI environment).
-- **npm**: Version 9 or higher.
+- **Node.js**: Version 24 (matching the CI environment, which pins
+  `node-version: 24`). Older versions may work but are not what CI runs
+  against, and the dependency-audit step behaves differently on npm 10 and
+  older — see [Running Checks](#running-checks).
+- **npm**: Whatever ships with Node 24 (npm 11). No separate install needed.
 - **Git**: Configured with your name and email.
 
 NetPulse is organized as two separate npm packages:
@@ -54,11 +57,19 @@ The frontend dev server runs Vite (default `http://localhost:5173`) and proxies 
 
 ## Branch and PR Conventions
 
-- **Branch naming**: Name your branch using the format:
-  ```text
-  fix/issue-<number>-<short-slug>
-  ```
-  Example: `fix/issue-34-contributing-guide`
+- **Branch naming**: Name your branch `<type>/issue-<number>-<short-slug>`,
+  where `<type>` describes the change:
+
+  | Type | Use for | Example |
+  | --- | --- | --- |
+  | `fix` | bug fixes | `fix/issue-34-contributing-guide` |
+  | `feat` | new features | `feat/issue-41-congestion-webhook-alerts` |
+  | `docs` | documentation | `docs/issue-40-api-reference` |
+  | `ci` | workflows and build tooling | `ci/add-codeql-scanning` |
+  | `chore` | maintenance | `chore/pr-template-and-contributing-fix` |
+
+  Work with no issue behind it — a CI fix, a maintenance pass — drops the
+  `issue-<number>` segment, as the `ci` and `chore` examples above show.
 
 - **Scope**: Keep changes strictly within the scope of the claimed issue. Do not bundle unrelated refactors, file modifications, or additional features into the PR.
 
@@ -80,9 +91,17 @@ The frontend dev server runs Vite (default `http://localhost:5173`) and proxies 
 
 ## Running Checks
 
-Before opening a pull request, ensure all local checks pass. These match the automated CI checks executed on pull requests:
+Before opening a pull request, ensure all local checks pass. These mirror the
+steps CI runs on pull requests, in the same order.
 
 ### Backend Checks
+
+From the repository root:
+
+```bash
+# Audit dependencies for high/critical advisories
+node .github/scripts/audit-deps.mjs backend
+```
 
 In `backend/`:
 
@@ -96,14 +115,58 @@ npm test
 
 ### Frontend Checks
 
+From the repository root:
+
+```bash
+# Audit production dependencies for high/critical advisories
+node .github/scripts/audit-deps.mjs frontend --omit=dev
+```
+
 In `frontend/`:
 
 ```bash
 # Type-check and build production bundle
 npm run build
 
+# Measure the styles.css palette against WCAG AA
+npm run audit:contrast
+
 # Run frontend tests
 npm test
 ```
 
-All CI workflows in `.github/workflows/ci.yml` must be fully green for PRs to be merged.
+`npm run audit:contrast` is easy to forget locally and will fail the frontend
+job if a palette change regresses contrast. jsdom cannot resolve cascaded
+colours, so the axe checks in the test suite skip contrast and this script
+covers it instead.
+
+### A note on the dependency audit
+
+`audit-deps.mjs` wraps `npm audit` rather than calling it directly, because
+`npm audit` exits non-zero both for a real advisory and for a registry outage.
+The script tells the two apart: a high or critical advisory fails, while an
+unreachable audit endpoint produces a warning and passes. **A run that warns
+means your dependencies were not audited — it is not a clean bill of health.**
+
+### What must be green
+
+Five checks run on a pull request, across two workflow files, and all must pass
+before merge:
+
+| Check | Workflow |
+| --- | --- |
+| Backend Type-Check & Tests | `.github/workflows/ci.yml` |
+| Frontend Build & Tests | `.github/workflows/ci.yml` |
+| Secret Scan (gitleaks) | `.github/workflows/ci.yml` |
+| Analyze (javascript-typescript) | `.github/workflows/codeql.yml` |
+| CodeQL | `.github/workflows/codeql.yml` |
+
+The Secret Scan and CodeQL checks have no local equivalent in the commands
+above; they run only in CI.
+
+Branch protection also requires your branch to be up to date with `main`, so a
+PR that has fallen behind needs updating before it can merge:
+
+```bash
+gh pr update-branch <number>
+```
