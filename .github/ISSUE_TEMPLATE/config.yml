@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/CONTRIBUTING.md
+    about: >-
+      Local setup, branch and PR conventions, and the checks that must be green
+      before a pull request can merge.
+  - name: Claiming an issue
+    url: https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/CONTRIBUTING.md#claiming-an-issue
+    about: >-
+      Want to work on an open issue? Claim it by commenting there — claims go by
+      first-comment timestamp, one issue at a time.
+  - name: Code of Conduct
+    url: https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/CODE_OF_CONDUCT.md
+    about: >-
+      The standards expected in this community, and how to report behavior that
+      falls short of them.

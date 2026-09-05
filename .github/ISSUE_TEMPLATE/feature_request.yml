@@ -1,0 +1,86 @@
+name: Feature Request
+description: Propose a new capability or an improvement to an existing one.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing something.
+
+        The most useful requests explain the problem before the solution — what
+        you were trying to do and where NetPulse got in the way. That leaves
+        room for a better answer than the one you had in mind.
+
+        Please check the [open issues](https://github.com/solaawojobi00-bit/netpulse-xlm/issues)
+        first, and see [PRD.md](https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/PRD.md)
+        for what's already in scope.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area
+      description: The part of NetPulse this would land in.
+      options:
+        - Metrics — ledger close time, fees, congestion, throughput, Soroban activity
+        - Alerting — congestion thresholds and webhook delivery
+        - Export — CSV/JSON download and history ranges
+        - UI — dashboard layout, charts, theme, accessibility
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What you'd like
+      description: >-
+        Describe the capability itself. Be concrete about the behavior — what
+        appears, what it does, where it lives in the dashboard or the API. If
+        you have a rough shape in mind for the response payload or the UI, say
+        so; it's easier to argue with something specific.
+      value: |
+        **What it does:**
+
+        **Where it lives:**
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it's useful
+      description: >-
+        The problem behind the request. What are you trying to accomplish, and
+        what do you do today instead? Concrete situations carry more weight than
+        general appeals — "I'm testing a Soroban contract and can't tell whether
+        a fee spike is mine or network-wide" says more than "better fee
+        visibility would be nice".
+      value: |
+        | Situation | Today | With this change |
+        | --- | --- | --- |
+        | _when this comes up_ | _what you do now, and why it falls short_ | _what you'd do instead_ |
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: >-
+        Other ways to solve the same problem, including doing nothing, and why
+        they fall short. Optional — but if you already talked yourself out of an
+        approach, that reasoning is worth capturing.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the open issues and this isn't already proposed
+          required: true
+        - label: >-
+            I agree to follow this project's
+            [Code of Conduct](https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/CODE_OF_CONDUCT.md)
+          required: true

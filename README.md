@@ -1,5 +1,9 @@
 # NetPulse
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+[![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-Contributor%20Covenant%202.1-5e35b1.svg)](./CODE_OF_CONDUCT.md)
+
 A live network health dashboard for the Stellar network, built for Stellar
 and Soroban developers who want a quick read on network conditions
 (ledger close time, base fees, congestion, throughput) while building and
