@@ -190,3 +190,7 @@ the status code — see
 [docs/API.md](./docs/API.md#what-makes-a-response-stale) for what exactly makes
 a response stale, how it relates to `secondsSinceLastUpdate`, and the full
 field-by-field reference.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
