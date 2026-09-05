@@ -83,7 +83,8 @@ stays legible alongside what actually shipped.
   data persisted beyond an in-memory rolling window). v1 is a live
   snapshot tool, not a time-series database product.
   *Partly shipped since v1 (#15):* history is persisted to SQLite with
-  7-day retention and surfaced as a 24h trend view in 5-minute buckets.
+  a retention window of 7-8 whole UTC days (#90) and surfaced as a 24h
+  trend view in 5-minute buckets.
   Longer-range daily/weekly aggregates remain out of scope.
 - **Per-account or per-transaction lookup/search** — this is not a block
   explorer. No address search, no transaction detail pages.
