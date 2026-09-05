@@ -1,0 +1,134 @@
+name: Bug Report
+description: Something in NetPulse behaves differently than it should.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        Fill in every field that applies and delete the placeholder text in the
+        prefilled boxes as you go. If a section genuinely doesn't apply, say why
+        rather than leaving it as-is — "n/a, backend-only change" is a useful
+        answer; an untouched template is not.
+
+        Please search the [open issues](https://github.com/solaawojobi00-bit/netpulse-xlm/issues)
+        first — a duplicate costs you the write-up and us the triage.
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer
+      description: >-
+        Where the problem surfaces, as best you can tell. Pick "Not sure" rather
+        than guessing — a wrong label is worse than none, and triage will
+        correct it.
+      options:
+        - Backend — HTTP API, Horizon poller, or WebSocket fan-out
+        - Frontend — dashboard UI, charts, or theme
+        - Export — CSV/JSON download
+        - Alerting — congestion webhook
+        - Docs, CI, or tooling
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network
+    attributes:
+      label: Which network was HORIZON_URL pointed at
+      description: >-
+        NetPulse runs against mainnet by default with testnet selectable from
+        the header, and the two networks differ enough in ledger timing, fee
+        levels, and congestion that a bug reproducing on one may not reproduce
+        on the other. This is often the single most useful line in the report.
+      options:
+        - Mainnet — https://horizon.stellar.org (the default)
+        - Testnet — https://horizon-testnet.stellar.org
+        - Both — reproduces on either network
+        - A custom or self-hosted Horizon instance
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        The exact sequence you followed, starting from a known state. Include
+        the settings that matter — the selected network, the history range, any
+        non-default values in `backend/.env`. A reproduction someone else can
+        follow verbatim is worth more than a paragraph of description.
+      value: |
+        1. Start the backend with `npm run dev` in `backend/`, using the default `.env`
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: Expected vs actual
+      description: >-
+        One row per observable difference. Be specific about what you actually
+        saw — an error message, a wrong number, a chart that stayed empty —
+        rather than "it didn't work".
+      value: |
+        | Scenario | Expected | Actual |
+        | --- | --- | --- |
+        | _when does this come up_ | _what should happen_ | _what happens instead_ |
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, errors, or console output
+      description: >-
+        Paste literal output — backend logs, the browser console, a failing
+        request's response body. Trim it to the relevant part, but don't
+        paraphrase it. Redact anything sensitive before pasting.
+      render: text
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: >-
+        Output of `node --version`. CI pins Node 24, so a mismatch here is worth
+        knowing. Skip for a frontend-only visual bug.
+      placeholder: v24.4.0
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: >-
+        Only relevant for dashboard bugs. Include the OS if you think it
+        matters.
+      placeholder: Firefox 128 on Windows 11
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: >-
+        Things you ruled out, a guess at the cause, or the commit where it
+        started if you bisected. Optional, but it often saves a round trip.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the open issues and this isn't a duplicate
+          required: true
+        - label: I can reproduce this on the current `main`
+        - label: >-
+            I agree to follow this project's
+            [Code of Conduct](https://github.com/solaawojobi00-bit/netpulse-xlm/blob/main/CODE_OF_CONDUCT.md)
+          required: true
