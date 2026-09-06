@@ -19,6 +19,11 @@ build/
 backend/dist/
 frontend/dist/
 
+# Coverage reports (vitest --coverage writes the HTML report here)
+coverage/
+backend/coverage/
+frontend/coverage/
+
 # Screenshots from scripts/a11y-browser-check.mjs
 frontend/a11y-shots/
 
