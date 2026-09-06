@@ -92,6 +92,19 @@ export function createApp(): express.Express {
     res.json(history);
   });
 
+  /*
+   * Validation matches /api/history exactly, which means lenient coercion: an
+   * unrecognised range becomes the default and the response is 200. There is
+   * no error vocabulary anywhere in this API today, and introducing 4xx on one
+   * new endpoint would make it behave unlike its five siblings for no stated
+   * reason. Tightening validation across the whole surface at once is #92.
+   */
+  app.get("/api/trends", (req, res) => {
+    const network = parseNetwork(req);
+    const range = req.query.range === "30d" ? 30 : req.query.range === "1y" ? 365 : 90;
+    res.json(db.getTrends(network, range));
+  });
+
   app.get("/api/soroban", (req, res) => {
     const network = parseNetwork(req);
     res.json(buildSorobanResponse(network));
