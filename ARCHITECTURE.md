@@ -108,6 +108,14 @@ from.
   the rollup happens first. Two separate units would let a crash between them
   leave either a rolled-up day whose raw rows survive, which the next run would
   count twice, or deleted rows with no rollup, which is a permanent gap.
+- It runs at process start and every six hours thereafter. Startup alone is not
+  enough: a process that stays up for weeks would otherwise honour the
+  retention window exactly once and let the file grow until the next redeploy.
+  Six hours is far more often than a day boundary actually moves, and
+  deliberately not tied to the ~6s Horizon poll interval — a day-scan does not
+  belong there. A failure is logged and swallowed, because a database that
+  cannot be pruned can still serve reads and accept writes; the transaction
+  means nothing is half-applied and the next run simply repeats the work.
 - Each run summarises **every complete UTC day still present in raw**, not only
   the day aging out. Rolling up just the boundary day would leave a seven-day
   hole at the right edge of a 30d or 90d chart. Recomputing days 1-7 is a
@@ -167,7 +175,8 @@ Express REST API                      WebSocket /ws
   GET /api/fees/recent                    subscribe / setNetwork message
   GET /api/soroban
   GET /api/operations/breakdown
-  GET /api/history  (SQLite-backed, 5-min buckets)
+  GET /api/history  (SQLite-backed, 5-min buckets, 7-8 day window)
+  GET /api/trends   (SQLite-backed, daily rollups, 30d/90d/1y)
   -> full reference: docs/API.md
         │                              │
         └──────────────┬───────────────┘
@@ -225,10 +234,12 @@ netpulse-xlm/
 │   │   ├── horizon.ts     Horizon fetch functions + SSE stream client
 │   │   ├── poller.ts      SSE ingestion, interval polling, rolling stores
 │   │   ├── ws.ts          WebSocket server + snapshot fan-out
-│   │   ├── db.ts          SQLite persistence, retention, history buckets
+│   │   ├── db.ts          SQLite persistence, rollup-then-prune retention,
+│   │   │                  history buckets, daily trend rows
 │   │   ├── metrics.ts     derives dashboard metrics from raw samples
 │   │   ├── alerts.ts      congestion threshold alerts + webhook delivery
-│   │   ├── csv.ts         history CSV serialisation for export
+│   │   ├── csv.ts         generic CSV writer + history/trends export
+│   │   ├── closeTime.ts   what counts as a valid ledger close time
 │   │   ├── origins.ts     CORS/WebSocket origin allowlist parsing
 │   │   ├── shutdown.ts    graceful shutdown runner
 │   │   ├── logger.ts      structured logging
