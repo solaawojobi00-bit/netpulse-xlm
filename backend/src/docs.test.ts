@@ -14,7 +14,11 @@ vi.mock("./horizon.js", () => ({
 }));
 
 import { db } from "./db.js";
-import { fetchFeeStats, fetchRecentLedgers, fetchRecentOperations } from "./horizon.js";
+import {
+  fetchFeeStats,
+  fetchRecentLedgers,
+  fetchRecentOperations,
+} from "./horizon.js";
 import { createApp } from "./index.js";
 import { pollOnce } from "./poller.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
@@ -141,7 +145,7 @@ describe("docs/API.md", () => {
      * undocumented route still answers requests.
      */
     const registered: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const router = (app as any)._router ?? (app as any).router;
     for (const layer of router?.stack ?? []) {
       if (layer.route?.path && typeof layer.route.path === "string") {

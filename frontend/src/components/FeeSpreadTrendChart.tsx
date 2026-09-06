@@ -57,7 +57,12 @@ export function FeeSpreadTrendChart({ snapshots, error }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={data} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={25} />
+          <XAxis
+            dataKey="time"
+            tick={axisTick}
+            stroke={axisStroke}
+            minTickGap={25}
+          />
           <YAxis tick={axisTick} stroke={axisStroke} width={45} />
           <Tooltip {...tooltipProps} />
           <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "4px" }} />

@@ -35,7 +35,9 @@ describe("LedgerCloseTimeChart", () => {
   });
 
   it("renders heading and chart container with ledger samples", () => {
-    const { container } = render(<LedgerCloseTimeChart ledgers={mockLedgers} />);
+    const { container } = render(
+      <LedgerCloseTimeChart ledgers={mockLedgers} />,
+    );
     expect(screen.getByText("Ledger close time")).toBeInTheDocument();
     expect(container.querySelector(".chart-card")).toBeInTheDocument();
   });

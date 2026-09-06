@@ -17,25 +17,33 @@ afterEach(() => {
 
 describe("fetchTrends", () => {
   it("requests the given network and range", async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(
-      okResponse({ network: "testnet", range: "1y", points: [] }),
-    );
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse({ network: "testnet", range: "1y", points: [] }),
+      );
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchTrends("testnet", "1y");
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/trends?network=testnet&range=1y");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/trends?network=testnet&range=1y",
+    );
   });
 
   it("defaults to mainnet and 90d", async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(
-      okResponse({ network: "mainnet", range: "90d", points: [] }),
-    );
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse({ network: "mainnet", range: "90d", points: [] }),
+      );
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchTrends();
 
-    expect(fetchSpy).toHaveBeenCalledWith("/api/trends?network=mainnet&range=90d");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/trends?network=mainnet&range=90d",
+    );
   });
 
   it("returns the parsed body", async () => {
@@ -64,7 +72,7 @@ describe("fetchTrends", () => {
   it("throws with the same message format as the other helpers", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response),
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
     );
 
     await expect(fetchTrends()).rejects.toThrow("GET /api/trends failed: 503");
@@ -99,7 +107,11 @@ describe("TREND_RANGES", () => {
      */
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(okResponse({ network: "mainnet", range: "90d", points: [] })),
+      vi
+        .fn()
+        .mockResolvedValue(
+          okResponse({ network: "mainnet", range: "90d", points: [] }),
+        ),
     );
 
     // @ts-expect-error "5y" is not a TrendRange.

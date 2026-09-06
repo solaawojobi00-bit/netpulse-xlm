@@ -32,7 +32,9 @@ function readStoredTheme(): Theme | null {
 
 function systemTheme(): Theme {
   if (typeof window.matchMedia !== "function") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return window.matchMedia("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
 }
 
 export function useTheme() {
@@ -53,7 +55,8 @@ export function useTheme() {
     if (typeof window.matchMedia !== "function") return;
     const query = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = (event: MediaQueryListEvent) => {
-      if (readStoredTheme() === null) setTheme(event.matches ? "light" : "dark");
+      if (readStoredTheme() === null)
+        setTheme(event.matches ? "light" : "dark");
     };
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);

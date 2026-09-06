@@ -47,15 +47,23 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="error-boundary" role="alert">
-        <h2 className="error-boundary__title">Something went wrong displaying this data</h2>
+        <h2 className="error-boundary__title">
+          Something went wrong displaying this data
+        </h2>
         <p className="error-boundary__message">
-          A part of the dashboard failed while rendering. The page header is still
-          usable, so you can switch networks or reload. Fresh data arrives every few
-          seconds, so trying again will often clear this.
+          A part of the dashboard failed while rendering. The page header is
+          still usable, so you can switch networks or reload. Fresh data arrives
+          every few seconds, so trying again will often clear this.
         </p>
-        {error.message && <p className="error-boundary__detail">{error.message}</p>}
+        {error.message && (
+          <p className="error-boundary__detail">{error.message}</p>
+        )}
         <div className="error-boundary__actions">
-          <button type="button" className="error-boundary__btn" onClick={this.handleRetry}>
+          <button
+            type="button"
+            className="error-boundary__btn"
+            onClick={this.handleRetry}
+          >
             Try again
           </button>
           <button

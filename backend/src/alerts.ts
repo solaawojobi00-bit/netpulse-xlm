@@ -98,7 +98,8 @@ export function nextAlertState(
 
   if (prev.status === "ok" && usage >= options.threshold) {
     const cooledDown =
-      prev.lastNotificationAt === null || now - prev.lastNotificationAt >= options.cooldownMs;
+      prev.lastNotificationAt === null ||
+      now - prev.lastNotificationAt >= options.cooldownMs;
 
     return {
       state: {
@@ -107,7 +108,13 @@ export function nextAlertState(
         lastNotificationAt: cooledDown ? now : prev.lastNotificationAt,
       },
       event: cooledDown
-        ? { kind: "alert", network, usage, threshold: options.threshold, timestamp }
+        ? {
+            kind: "alert",
+            network,
+            usage,
+            threshold: options.threshold,
+            timestamp,
+          }
         : null,
     };
   }
@@ -120,7 +127,13 @@ export function nextAlertState(
         lastNotificationAt: prev.notified ? now : prev.lastNotificationAt,
       },
       event: prev.notified
-        ? { kind: "recovery", network, usage, threshold: options.threshold, timestamp }
+        ? {
+            kind: "recovery",
+            network,
+            usage,
+            threshold: options.threshold,
+            timestamp,
+          }
         : null,
     };
   }
@@ -145,7 +158,10 @@ function describe(event: AlertEvent): string {
  * Slack both reject bodies they do not recognise, so a single generic payload
  * would work with neither.
  */
-export function formatPayload(event: AlertEvent, format: WebhookFormat): unknown {
+export function formatPayload(
+  event: AlertEvent,
+  format: WebhookFormat,
+): unknown {
   const text = describe(event);
 
   if (format === "discord") {
@@ -186,11 +202,14 @@ export function formatPayload(event: AlertEvent, format: WebhookFormat): unknown
       blocks: [
         {
           type: "section",
-          text: { type: "mrkdwn", text: `*${
-            event.kind === "alert"
-              ? "High network congestion"
-              : "Network congestion recovered"
-          }*\n${text}` },
+          text: {
+            type: "mrkdwn",
+            text: `*${
+              event.kind === "alert"
+                ? "High network congestion"
+                : "Network congestion recovered"
+            }*\n${text}`,
+          },
         },
         {
           type: "context",
@@ -232,7 +251,11 @@ function parseFormat(raw: string | undefined): WebhookFormat {
   return "generic";
 }
 
-function parseNumber(raw: string | undefined, fallback: number, min: number): number {
+function parseNumber(
+  raw: string | undefined,
+  fallback: number,
+  min: number,
+): number {
   const value = Number(raw);
   return Number.isFinite(value) && value >= min ? value : fallback;
 }
@@ -251,10 +274,22 @@ export function getAlertConfig(): AlertConfig | null {
     format: parseFormat(process.env.ALERT_WEBHOOK_FORMAT),
     options: {
       threshold: getCongestionAlertThreshold(),
-      hysteresis: parseNumber(process.env.ALERT_HYSTERESIS, DEFAULT_HYSTERESIS, 0),
-      cooldownMs: parseNumber(process.env.ALERT_COOLDOWN_MS, DEFAULT_COOLDOWN_MS, 0),
+      hysteresis: parseNumber(
+        process.env.ALERT_HYSTERESIS,
+        DEFAULT_HYSTERESIS,
+        0,
+      ),
+      cooldownMs: parseNumber(
+        process.env.ALERT_COOLDOWN_MS,
+        DEFAULT_COOLDOWN_MS,
+        0,
+      ),
     },
-    timeoutMs: parseNumber(process.env.ALERT_WEBHOOK_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 1),
+    timeoutMs: parseNumber(
+      process.env.ALERT_WEBHOOK_TIMEOUT_MS,
+      DEFAULT_TIMEOUT_MS,
+      1,
+    ),
   };
 }
 
@@ -263,7 +298,10 @@ export function getAlertConfig(): AlertConfig | null {
  * returning 500 must not take down the poller or interrupt metric collection,
  * so every failure is logged and swallowed.
  */
-export async function deliverAlert(event: AlertEvent, config: AlertConfig): Promise<boolean> {
+export async function deliverAlert(
+  event: AlertEvent,
+  config: AlertConfig,
+): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 

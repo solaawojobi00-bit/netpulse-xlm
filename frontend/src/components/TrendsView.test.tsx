@@ -50,13 +50,17 @@ describe("TrendsView", () => {
      * At daily grain the wait is until tomorrow, so history's "check back
      * after several ledgers close" would send someone to refresh in a minute.
      */
-    expect(screen.queryByText(/several ledgers close/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/several ledgers close/i),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces a failed fetch instead of looking empty", () => {
     render(<TrendsView points={null} range="90d" error="Failed to fetch" />);
 
-    expect(screen.getByText(/Could not load long-range trends/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not load long-range trends/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/No daily rollups yet/i)).not.toBeInTheDocument();
   });
 
@@ -64,7 +68,9 @@ describe("TrendsView", () => {
     render(<TrendsView points={null} range="90d" error="Failed to fetch" />);
 
     // One fetch drives every card, so one failure is one message.
-    expect(screen.getAllByText(/Could not load long-range trends/i)).toHaveLength(1);
+    expect(
+      screen.getAllByText(/Could not load long-range trends/i),
+    ).toHaveLength(1);
   });
 
   it("renders the badge and range control in every state", () => {
@@ -87,8 +93,12 @@ describe("TrendsView", () => {
       );
 
       // A failed or loading panel is exactly when someone wants another range.
-      expect(screen.getByText(/Daily resolution · retained indefinitely/i)).toBeInTheDocument();
-      expect(screen.getByRole("group", { name: /trend time range/i })).toBeInTheDocument();
+      expect(
+        screen.getByText(/Daily resolution · retained indefinitely/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("group", { name: /trend time range/i }),
+      ).toBeInTheDocument();
 
       unmount();
     }
@@ -98,16 +108,22 @@ describe("TrendsView", () => {
     render(<TrendsView points={mockPoints} range="1y" />);
 
     expect(screen.getByText("1y Long-Range Trends")).toBeInTheDocument();
-    expect(screen.getByText("1y Daily ledger close time (avg seconds)")).toBeInTheDocument();
     expect(
-      screen.getByText("1y Daily congestion, average and peak (capacity usage %)"),
+      screen.getByText("1y Daily ledger close time (avg seconds)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "1y Daily congestion, average and peak (capacity usage %)",
+      ),
     ).toBeInTheDocument();
   });
 
   it("gives each chart a distinct accessible name", () => {
     render(<TrendsView points={mockPoints} range="90d" />);
 
-    const names = screen.getAllByRole("img").map((el) => el.getAttribute("aria-label"));
+    const names = screen
+      .getAllByRole("img")
+      .map((el) => el.getAttribute("aria-label"));
 
     expect(names).toHaveLength(2);
     // Two charts both called "trends" would pass axe and still be useless.
@@ -120,10 +136,16 @@ describe("TrendsView", () => {
   it("describes each chart rather than only naming it", () => {
     render(<TrendsView points={mockPoints} range="90d" />);
 
-    const names = screen.getAllByRole("img").map((el) => el.getAttribute("aria-label") ?? "");
+    const names = screen
+      .getAllByRole("img")
+      .map((el) => el.getAttribute("aria-label") ?? "");
 
-    expect(names.some((n) => /close time/i.test(n) && /5\.4/.test(n))).toBe(true);
-    expect(names.some((n) => /peak capacity usage/i.test(n) && /94/.test(n))).toBe(true);
+    expect(names.some((n) => /close time/i.test(n) && /5\.4/.test(n))).toBe(
+      true,
+    );
+    expect(
+      names.some((n) => /peak capacity usage/i.test(n) && /94/.test(n)),
+    ).toBe(true);
   });
 
   it("reports a range change through onRangeChange", async () => {
@@ -164,7 +186,9 @@ describe("TrendsView", () => {
       { ...mockPoints[0], congestionUsage: null, maxCongestionUsage: null },
     ];
 
-    expect(() => render(<TrendsView points={sparse} range="90d" />)).not.toThrow();
+    expect(() =>
+      render(<TrendsView points={sparse} range="90d" />),
+    ).not.toThrow();
     expect(screen.getByText("90d Long-Range Trends")).toBeInTheDocument();
   });
 });
@@ -193,12 +217,20 @@ describe("formatTrendDate", () => {
      * day. That is exact everywhere and, on a west-of-UTC machine, is also
      * precisely the assertion that fails if `timeZone: "UTC"` is dropped.
      */
-    for (const date of ["2026-09-01", "2026-01-01", "2026-12-31", "2026-03-01"]) {
-      const utcReference = new Date(`${date}T00:00:00Z`).toLocaleDateString([], {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      });
+    for (const date of [
+      "2026-09-01",
+      "2026-01-01",
+      "2026-12-31",
+      "2026-03-01",
+    ]) {
+      const utcReference = new Date(`${date}T00:00:00Z`).toLocaleDateString(
+        [],
+        {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        },
+      );
 
       expect(formatTrendDate(date)).toBe(utcReference);
     }

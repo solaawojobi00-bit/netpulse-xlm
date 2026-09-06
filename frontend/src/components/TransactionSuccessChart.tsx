@@ -11,7 +11,13 @@ import {
 import type { LedgerSample } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { describeSeries, joinSummary } from "./chartSummary";
-import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
+import {
+  axisStroke,
+  axisTick,
+  barTooltipCursor,
+  chartA11y,
+  tooltipProps,
+} from "./chartTheme";
 
 interface Props {
   ledgers: LedgerSample[] | null;
@@ -23,7 +29,8 @@ export function TransactionSuccessChart({ ledgers, error }: Props) {
     const successful = l.successfulTransactionCount ?? 0;
     const failed = l.failedTransactionCount ?? 0;
     const total = successful + failed;
-    const failureRate = total > 0 ? Number(((failed / total) * 100).toFixed(1)) : 0;
+    const failureRate =
+      total > 0 ? Number(((failed / total) * 100).toFixed(1)) : 0;
 
     return {
       sequence: l.sequence,
@@ -69,7 +76,14 @@ export function TransactionSuccessChart({ ledgers, error }: Props) {
               patternTransform="rotate(45)"
             >
               <rect width="6" height="6" fill="var(--bad-color)" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--surface-color)" strokeWidth="3" />
+              <line
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="6"
+                stroke="var(--surface-color)"
+                strokeWidth="3"
+              />
             </pattern>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
@@ -82,7 +96,12 @@ export function TransactionSuccessChart({ ledgers, error }: Props) {
           <YAxis tick={axisTick} stroke={axisStroke} width={35} />
           <Tooltip {...tooltipProps} cursor={barTooltipCursor} />
           <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "4px" }} />
-          <Bar dataKey="successful" stackId="txs" fill="var(--good-color)" name="Successful" />
+          <Bar
+            dataKey="successful"
+            stackId="txs"
+            fill="var(--good-color)"
+            name="Successful"
+          />
           <Bar
             dataKey="failed"
             stackId="txs"

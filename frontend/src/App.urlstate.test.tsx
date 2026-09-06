@@ -27,7 +27,10 @@ vi.mock("./useSubscription", () => ({
 
 vi.mock("./api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api")>();
-  return { ...actual, fetchHistory: (...args: unknown[]) => fetchHistory(...args) };
+  return {
+    ...actual,
+    fetchHistory: (...args: unknown[]) => fetchHistory(...args),
+  };
 });
 
 let seenNetworks: string[] = [];
@@ -50,7 +53,11 @@ function setUrl(search: string) {
 beforeEach(() => {
   seenNetworks = [];
   fetchHistory.mockReset();
-  fetchHistory.mockResolvedValue({ network: "mainnet", range: "24h", points: [] });
+  fetchHistory.mockResolvedValue({
+    network: "mainnet",
+    range: "24h",
+    points: [],
+  });
   setUrl("");
 });
 
@@ -106,7 +113,9 @@ describe("view state in the URL", () => {
     render(<App />);
 
     // Renders, does not throw, and lands on the defaults.
-    expect(screen.getByRole("heading", { level: 1, name: "NetPulse" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "NetPulse" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mainnet" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -123,7 +132,9 @@ describe("view state in the URL", () => {
     await userEvent.click(screen.getByRole("button", { name: "Testnet" }));
 
     expect(window.location.search).toBe("?network=testnet");
-    await waitFor(() => expect(fetchHistory).toHaveBeenCalledWith("testnet", "24h"));
+    await waitFor(() =>
+      expect(fetchHistory).toHaveBeenCalledWith("testnet", "24h"),
+    );
   });
 
   it("writes the range to the URL and refetches history", async () => {
@@ -132,7 +143,9 @@ describe("view state in the URL", () => {
     await userEvent.click(screen.getByRole("button", { name: "6h" }));
 
     expect(new URLSearchParams(window.location.search).get("range")).toBe("6h");
-    await waitFor(() => expect(fetchHistory).toHaveBeenCalledWith("mainnet", "6h"));
+    await waitFor(() =>
+      expect(fetchHistory).toHaveBeenCalledWith("mainnet", "6h"),
+    );
     expect(screen.getByText("6h Historical Trends")).toBeInTheDocument();
   });
 
@@ -156,7 +169,9 @@ describe("view state in the URL", () => {
     await userEvent.click(screen.getByRole("button", { name: "Testnet" }));
 
     expect(heading).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "NetPulse" })).toBe(heading);
+    expect(screen.getByRole("heading", { level: 1, name: "NetPulse" })).toBe(
+      heading,
+    );
   });
 
   it("does not pile up history entries as the user toggles", async () => {

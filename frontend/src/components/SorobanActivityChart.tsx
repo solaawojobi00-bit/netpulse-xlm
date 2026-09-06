@@ -55,7 +55,8 @@ export function SorobanActivityChart({ soroban, error }: Props) {
       )}
       subtitle={
         <p className="soroban-card__subtitle">
-          Smart contract activity (<code>invoke_host_function</code>) separated from classic Stellar ops
+          Smart contract activity (<code>invoke_host_function</code>) separated
+          from classic Stellar ops
         </p>
       }
       headerExtra={
@@ -72,7 +73,12 @@ export function SorobanActivityChart({ soroban, error }: Props) {
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData} {...chartA11y}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-          <XAxis dataKey="name" tick={axisTick} stroke={axisStroke} minTickGap={25} />
+          <XAxis
+            dataKey="name"
+            tick={axisTick}
+            stroke={axisStroke}
+            minTickGap={25}
+          />
           <YAxis
             tick={axisTick}
             stroke={axisStroke}

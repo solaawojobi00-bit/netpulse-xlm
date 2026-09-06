@@ -23,7 +23,11 @@ export function SegmentedControl<T extends string>({
   className = "",
 }: SegmentedControlProps<T>) {
   return (
-    <div className={`segmented ${className}`.trim()} role="group" aria-label={label}>
+    <div
+      className={`segmented ${className}`.trim()}
+      role="group"
+      aria-label={label}
+    >
       {options.map((option) => {
         const active = option.value === value;
         return (

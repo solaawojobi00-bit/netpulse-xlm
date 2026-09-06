@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { COMPACT_STROOP_THRESHOLD, formatHorizonEndpoint, formatOperationType, formatPercent, formatRate, formatSeconds, formatStroops, formatWindow } from "./format";
+import {
+  COMPACT_STROOP_THRESHOLD,
+  formatHorizonEndpoint,
+  formatOperationType,
+  formatPercent,
+  formatRate,
+  formatSeconds,
+  formatStroops,
+  formatWindow,
+} from "./format";
 
 describe("formatSeconds", () => {
   it("returns dash for null or NaN", () => {
@@ -94,19 +103,27 @@ describe("formatHorizonEndpoint", () => {
 
 describe("formatOperationType", () => {
   it("uses the curated label where a mechanical one would read badly", () => {
-    expect(formatOperationType("path_payment_strict_send")).toBe("Path payment (strict send)");
+    expect(formatOperationType("path_payment_strict_send")).toBe(
+      "Path payment (strict send)",
+    );
     expect(formatOperationType("path_payment_strict_receive")).toBe(
       "Path payment (strict receive)",
     );
-    expect(formatOperationType("invoke_host_function")).toBe("Contract invocation");
+    expect(formatOperationType("invoke_host_function")).toBe(
+      "Contract invocation",
+    );
   });
 
   it("humanizes a type it has never seen rather than printing the identifier", () => {
     // The table is not exhaustive on purpose: protocol upgrades add types, and
     // a chart that printed `some_future_operation` would be the worse failure.
-    expect(formatOperationType("some_future_operation")).toBe("Some future operation");
+    expect(formatOperationType("some_future_operation")).toBe(
+      "Some future operation",
+    );
     expect(formatOperationType("clawback")).toBe("Clawback");
-    expect(formatOperationType("liquidity_pool_deposit")).toBe("Liquidity pool deposit");
+    expect(formatOperationType("liquidity_pool_deposit")).toBe(
+      "Liquidity pool deposit",
+    );
   });
 
   it("never returns an empty label", () => {
