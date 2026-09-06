@@ -12,6 +12,16 @@ updates:
     labels:
       - dependencies
       - backend
+    # vitest peer-pins its scoped packages to an exact version, not a range:
+    # vitest@5.0.0 requires @vitest/coverage-v8@5.0.0 and vice versa. They must
+    # therefore move together on every release, patches included - tighter than
+    # the react group, which only needs agreement on the major. The @vitest/*
+    # wildcard also covers @vitest/ui and the other scoped packages if added.
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
     # TypeScript 7.0 is the Go rewrite of the compiler (typescript-go), not an
     # incremental release. Adopting it is a deliberate migration, not a routine
     # bump, so hold majors here and let minor/patch flow normally.
