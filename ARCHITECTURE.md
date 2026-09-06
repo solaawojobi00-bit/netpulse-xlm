@@ -195,12 +195,13 @@ Dashboard UI
         - Soroban invocation activity chart
         - Operation type breakdown chart
         - 24h history view (from SQLite), with CSV/JSON export
+        - Long-range trends view (daily rollups, 30d/90d/1y)
         - Congestion banner above the configured threshold
         - Staleness banner if the backend hasn't gotten fresh Horizon data
         - Per-chart loading / empty / error states
         - Light and dark theme, toggled in the header
-        - Network and history range reflected in the URL, so a view is
-          shareable and survives a reload
+        - Network, history range and trend range reflected in the URL, so a
+          view is shareable and survives a reload
 ```
 
 The backend sits between the frontend and Horizon (rather than the
@@ -260,7 +261,7 @@ netpulse-xlm/
     │   ├── api.ts             typed fetch wrappers + response types
     │   ├── useSubscription.ts WebSocket subscription + REST fallback
     │   ├── usePolling.ts      interval polling hook (fallback path)
-    │   ├── useQueryParam.ts   URL-backed state (network, history range)
+    │   ├── useQueryParam.ts   URL-backed state (network, history + trend range)
     │   ├── useTheme.ts        light/dark theme preference
     │   ├── format.ts          number/duration formatting helpers
     │   ├── components/        stat tiles, charts, history view,

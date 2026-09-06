@@ -31,7 +31,8 @@ and transaction charts.
 
 Also since Phase 1: congestion alerting over a webhook, graceful shutdown,
 a light/dark theme, an accessibility pass across the charts and palette,
-per-chart loading and error states, and network and history range reflected
+per-chart loading and error states, a long-range trends panel over daily
+rollups (30d/90d/1y), and network, history range and trend range reflected
 in the URL so a view is shareable.
 
 See the open issues for the current backlog. See [CONTRIBUTING.md](./CONTRIBUTING.md)

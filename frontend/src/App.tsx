@@ -13,12 +13,17 @@ import { StatTile } from "./components/StatTile";
 import { SyncStatus } from "./components/SyncStatus";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
+import { TrendsView } from "./components/TrendsView";
 import {
   fetchHistory,
+  fetchTrends,
   HISTORY_RANGES,
+  TREND_RANGES,
   type HistoryPoint,
   type HistoryRange,
   type Network,
+  type TrendPoint,
+  type TrendRange,
 } from "./api";
 import {
   formatHorizonEndpoint,
@@ -47,6 +52,21 @@ const NETWORK_OPTIONS = [
 
 const RANGE_OPTIONS = HISTORY_RANGES.map((value) => ({ value, label: value }));
 
+const TREND_RANGE_OPTIONS = TREND_RANGES.map((value) => ({
+  value,
+  label: value,
+}));
+
+/*
+ * History polls at 30s because its buckets are 5 minutes wide, so a fresh
+ * bucket really can appear that often. Trend rows are one per completed UTC
+ * day, so polling them at the same rate would issue roughly 2,900 requests a
+ * day per client to observe at most one change. Five minutes is still far more
+ * often than the data can move, and keeps a tab left open overnight from
+ * needing a reload to notice yesterday's rollup.
+ */
+const TRENDS_POLL_MS = 300000;
+
 export function App() {
   /*
    * Network and range live in the query string so the URL is shareable: the
@@ -64,6 +84,16 @@ export function App() {
     HISTORY_RANGES,
     "24h",
   );
+  /*
+   * A distinct parameter name, not a second reader of `range`: the history and
+   * trend selectors offer different values (24h vs 1y) and move independently,
+   * so one visitor can share a link to a 6h history beside a 1y trend.
+   */
+  const [trendRange, setTrendRange] = useQueryParam<TrendRange>(
+    "trendRange",
+    TREND_RANGES,
+    "90d",
+  );
   const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, operationBreakdown, error } =
     useSubscription(network);
@@ -73,6 +103,11 @@ export function App() {
     null,
   );
   const [historyError, setHistoryError] = useState<string | null>(null);
+  // Trends carry their own points and error, kept apart from history's for the
+  // same reason history is kept apart from the live socket: one failing source
+  // must not blank the others.
+  const [trendPoints, setTrendPoints] = useState<TrendPoint[] | null>(null);
+  const [trendsError, setTrendsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +137,34 @@ export function App() {
       clearInterval(interval);
     };
   }, [network, range]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Same discard-on-change rule as history: showing the old 90d series under
+    // a "1y" heading while the new fetch is in flight would be a chart that
+    // disagrees with its own label.
+    setTrendPoints(null);
+    setTrendsError(null);
+
+    function loadTrends() {
+      fetchTrends(network, trendRange)
+        .then((res) => {
+          if (cancelled) return;
+          setTrendPoints(res.points);
+          setTrendsError(null);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setTrendsError(err instanceof Error ? err.message : String(err));
+        });
+    }
+    loadTrends();
+    const interval = setInterval(loadTrends, TRENDS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [network, trendRange]);
 
   /*
    * Was `health === null`, which conflated "not here yet" with "will never
@@ -269,6 +332,19 @@ export function App() {
             error={historyError}
             rangeOptions={RANGE_OPTIONS}
             onRangeChange={setRange}
+          />
+
+          {/*
+            Below history and inside the same boundary: the two panels show the
+            same metrics at different grains, and reading them together is the
+            point — coarse trend above the fold of memory, fine detail nearer.
+          */}
+          <TrendsView
+            points={trendPoints}
+            range={trendRange}
+            error={trendsError}
+            rangeOptions={TREND_RANGE_OPTIONS}
+            onRangeChange={setTrendRange}
           />
         </ErrorBoundary>
       </main>

@@ -27,15 +27,24 @@ import type {
   HistoryPoint,
   LedgerSample,
   SorobanMetricsResponse,
+  TrendPoint,
 } from "./api";
 
 vi.mock("./useSubscription", () => ({
   useSubscription: () => mockSubscription,
 }));
 
+/*
+ * Both fetches are stubbed. Spreading `importOriginal` keeps the real types and
+ * range constants, but it also keeps the real `fetchTrends` — and once `App`
+ * calls it, an unstubbed one would issue a live `fetch` under jsdom on every
+ * test in this file that renders the whole page.
+ */
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   fetchHistory: () => Promise.resolve({ range: "24h", points: historyPoints }),
+  fetchTrends: () =>
+    Promise.resolve({ network: "mainnet", range: "90d", points: trendPoints }),
 }));
 
 async function expectNoViolations(container: HTMLElement) {
@@ -71,6 +80,18 @@ const historyPoints: HistoryPoint[] = Array.from({ length: 4 }, (_, i) => ({
   operations: 500 + i,
   transactions: 200 + i,
 })) as HistoryPoint[];
+
+const trendPoints: TrendPoint[] = Array.from({ length: 4 }, (_, i) => ({
+  date: `2026-01-0${i + 1}`,
+  closeTimeSeconds: 5 + i * 0.2,
+  congestionUsage: 0.3 + i * 0.05,
+  maxCongestionUsage: 0.5 + i * 0.05,
+  operations: 500 + i,
+  successfulTransactions: 200 + i,
+  failedTransactions: 2,
+  p50Fee: 120,
+  p90Fee: 900,
+}));
 
 const health: HealthResponse = {
   status: "ok",
