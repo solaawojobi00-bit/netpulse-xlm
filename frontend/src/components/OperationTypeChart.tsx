@@ -11,7 +11,13 @@ import {
 import type { OperationBreakdownResponse } from "../api";
 import { formatOperationType, formatWindow } from "../format";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
-import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
+import {
+  axisStroke,
+  axisTick,
+  barTooltipCursor,
+  chartA11y,
+  tooltipProps,
+} from "./chartTheme";
 
 interface Props {
   breakdown: OperationBreakdownResponse | null;
@@ -97,7 +103,12 @@ export function OperationTypeChart({ breakdown, error }: Props) {
           {/* Vertical only: horizontal rules behind horizontal bars would
               trace the bars themselves rather than help read their length. */}
           <CartesianGrid stroke="var(--grid-color)" horizontal={false} />
-          <XAxis type="number" tick={axisTick} stroke={axisStroke} allowDecimals={false} />
+          <XAxis
+            type="number"
+            tick={axisTick}
+            stroke={axisStroke}
+            allowDecimals={false}
+          />
           <YAxis
             type="category"
             dataKey="label"
@@ -110,7 +121,8 @@ export function OperationTypeChart({ breakdown, error }: Props) {
             {...tooltipProps}
             cursor={barTooltipCursor}
             formatter={(value, _name, entry) => {
-              const percent = (entry as { payload?: { percent?: number } })?.payload?.percent;
+              const percent = (entry as { payload?: { percent?: number } })
+                ?.payload?.percent;
               return [
                 `${Number(value).toLocaleString()}${percent === undefined ? "" : ` (${percent}%)`}`,
                 "Operations",

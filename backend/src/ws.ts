@@ -1,5 +1,6 @@
 import type { Server } from "http";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
+import { z } from "zod";
 import type { Network } from "./horizon.js";
 import { logger } from "./logger.js";
 import { buildHealthResponse } from "./metrics.js";
@@ -15,6 +16,31 @@ const WS_PATH = "/ws";
 
 interface ClientState {
   network: Network;
+}
+
+/*
+ * Client frames are external input, so they get parsed the same way Horizon's
+ * responses do rather than being trusted as whatever `JSON.parse` returned.
+ * `network` stays loose on purpose: the caller below treats anything that is
+ * not "testnet" as mainnet, which is the existing behaviour for a missing or
+ * unrecognised value.
+ */
+const ClientMessageSchema = z.object({
+  type: z.enum(["subscribe", "setNetwork"]),
+  network: z.string().optional(),
+});
+
+/*
+ * `ws` types a frame as `RawData`, which is a Buffer, an ArrayBuffer, or an
+ * array of Buffers depending on how the payload arrived. Only the first has a
+ * useful `toString()` -- an ArrayBuffer stringifies to "[object ArrayBuffer]"
+ * and a Buffer[] to its elements comma-joined, so a fragmented or binary frame
+ * would reach JSON.parse as nonsense and be dropped as "malformed".
+ */
+export function decodeRawData(data: RawData): string {
+  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
+  return data.toString("utf8");
 }
 
 export function setupWebSocketServer(server: Server): WebSocketServer {
@@ -80,12 +106,14 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
 
     ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === "subscribe" || msg.type === "setNetwork") {
-          const network: Network = msg.network === "testnet" ? "testnet" : "mainnet";
-          clients.set(ws, { network });
-          sendState(ws, network);
-        }
+        const msg = ClientMessageSchema.safeParse(
+          JSON.parse(decodeRawData(data)),
+        );
+        if (!msg.success) return;
+        const network: Network =
+          msg.data.network === "testnet" ? "testnet" : "mainnet";
+        clients.set(ws, { network });
+        sendState(ws, network);
       } catch {
         // Ignore malformed client messages
       }

@@ -50,7 +50,9 @@ export function useQueryParam<T extends string>(
   allowed: readonly T[],
   fallback: T,
 ): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(() => readParam(key, allowed, fallback));
+  const [value, setValue] = useState<T>(() =>
+    readParam(key, allowed, fallback),
+  );
 
   const set = useCallback(
     (next: T) => {

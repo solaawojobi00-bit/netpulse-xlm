@@ -50,7 +50,9 @@ export interface HealthResponse {
 
 export type Network = "mainnet" | "testnet";
 
-export async function fetchHealth(network: Network = "mainnet"): Promise<HealthResponse> {
+export async function fetchHealth(
+  network: Network = "mainnet",
+): Promise<HealthResponse> {
   const res = await fetch(`/api/health?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/health failed: ${res.status}`);
   return (await res.json()) as HealthResponse;
@@ -195,7 +197,8 @@ export async function fetchOperationBreakdown(
   network: Network = "mainnet",
 ): Promise<OperationBreakdownResponse> {
   const res = await fetch(`/api/operations/breakdown?network=${network}`);
-  if (!res.ok) throw new Error(`GET /api/operations/breakdown failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error(`GET /api/operations/breakdown failed: ${res.status}`);
   return (await res.json()) as OperationBreakdownResponse;
 }
 

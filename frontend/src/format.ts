@@ -30,7 +30,10 @@ export function formatPercent(value: number | null): string {
 export function formatRate(value: number | null): string {
   if (value === null || Number.isNaN(value)) return "—";
   if (value >= 1000) {
-    return value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
   }
   return value.toFixed(1);
 }

@@ -3,7 +3,7 @@ import type { AddressInfo } from "net";
 import { WebSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import { isOriginAllowed, parseAllowedOrigins } from "./origins.js";
-import { setupWebSocketServer } from "./ws.js";
+import { decodeRawData, setupWebSocketServer } from "./ws.js";
 
 describe("parseAllowedOrigins", () => {
   it("falls back to the Vite dev server so local development needs no config", () => {
@@ -12,14 +12,15 @@ describe("parseAllowedOrigins", () => {
   });
 
   it("splits a comma-separated list and trims whitespace", () => {
-    expect(parseAllowedOrigins("https://a.example, https://b.example")).toEqual([
-      "https://a.example",
-      "https://b.example",
-    ]);
+    expect(parseAllowedOrigins("https://a.example, https://b.example")).toEqual(
+      ["https://a.example", "https://b.example"],
+    );
   });
 
   it("normalises trailing slashes so both spellings match", () => {
-    expect(parseAllowedOrigins("https://a.example/")).toEqual(["https://a.example"]);
+    expect(parseAllowedOrigins("https://a.example/")).toEqual([
+      "https://a.example",
+    ]);
   });
 });
 
@@ -46,6 +47,52 @@ describe("isOriginAllowed", () => {
   });
 });
 
+/*
+ * `ws` hands a frame to the message handler as one of three shapes depending
+ * on how it arrived. Only a Buffer has a `toString()` worth calling: the
+ * previous `data.toString()` turned an ArrayBuffer into the literal
+ * "[object ArrayBuffer]" and a fragmented Buffer[] into its elements
+ * comma-joined. Both then failed JSON.parse and were swallowed by the
+ * handler's catch as "malformed", so a client's setNetwork silently did
+ * nothing and the dashboard kept streaming the previous network.
+ */
+describe("decodeRawData", () => {
+  const message = JSON.stringify({ type: "setNetwork", network: "testnet" });
+
+  it("decodes a Buffer frame", () => {
+    expect(decodeRawData(Buffer.from(message, "utf8"))).toBe(message);
+  });
+
+  it("decodes an ArrayBuffer frame", () => {
+    const bytes = new TextEncoder().encode(message);
+    // Slice to a standalone ArrayBuffer so the view's offset cannot mask a
+    // decode that ignores byteOffset/byteLength.
+    const arrayBuffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
+
+    expect(decodeRawData(arrayBuffer)).toBe(message);
+  });
+
+  it("decodes a fragmented Buffer[] frame by concatenating, not comma-joining", () => {
+    const split = 10;
+    const fragments = [
+      Buffer.from(message.slice(0, split), "utf8"),
+      Buffer.from(message.slice(split), "utf8"),
+    ];
+
+    const decoded = decodeRawData(fragments);
+    expect(decoded).toBe(message);
+    expect(decoded).not.toContain(",{");
+  });
+
+  it("decodes multi-byte UTF-8 without mangling it", () => {
+    const unicode = JSON.stringify({ type: "subscribe", note: "café ✓" });
+    expect(decodeRawData(Buffer.from(unicode, "utf8"))).toBe(unicode);
+  });
+});
+
 describe("WebSocket handshake origin validation", () => {
   let server: Server;
 
@@ -61,7 +108,10 @@ describe("WebSocket handshake origin validation", () => {
   }
 
   function connect(port: number, origin?: string) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, origin ? { origin } : {});
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/ws`,
+      origin ? { origin } : {},
+    );
     return new Promise<{ opened: boolean; status?: number }>((resolve) => {
       ws.on("open", () => {
         ws.close();
@@ -79,9 +129,11 @@ describe("WebSocket handshake origin validation", () => {
 
   it("accepts a connection from the default allowed origin", async () => {
     const port = await listen();
-    await expect(connect(port, "http://localhost:5173")).resolves.toMatchObject({
-      opened: true,
-    });
+    await expect(connect(port, "http://localhost:5173")).resolves.toMatchObject(
+      {
+        opened: true,
+      },
+    );
   });
 
   it("refuses a disallowed origin at the upgrade stage with 403", async () => {
@@ -103,13 +155,15 @@ describe("WebSocket handshake origin validation", () => {
       origin: "http://localhost:5173",
     });
 
-    const outcome = await new Promise<{ kind: string; status?: number }>((resolve) => {
-      other.on("open", () => resolve({ kind: "opened" }));
-      other.on("unexpected-response", (_req, res) =>
-        resolve({ kind: "rejected", status: res.statusCode }),
-      );
-      other.on("error", () => resolve({ kind: "error" }));
-    });
+    const outcome = await new Promise<{ kind: string; status?: number }>(
+      (resolve) => {
+        other.on("open", () => resolve({ kind: "opened" }));
+        other.on("unexpected-response", (_req, res) =>
+          resolve({ kind: "rejected", status: res.statusCode }),
+        );
+        other.on("error", () => resolve({ kind: "error" }));
+      },
+    );
 
     expect(outcome.kind).toBe("rejected");
     expect(outcome.status).toBe(404);

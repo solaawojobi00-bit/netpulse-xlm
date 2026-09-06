@@ -10,7 +10,13 @@ import {
 import type { LedgerSample } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { describeSeries } from "./chartSummary";
-import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
+import {
+  axisStroke,
+  axisTick,
+  barTooltipCursor,
+  chartA11y,
+  tooltipProps,
+} from "./chartTheme";
 
 interface Props {
   ledgers: LedgerSample[] | null;

@@ -59,13 +59,20 @@ export function SyncStatus({
   const isStale = status === "stale";
 
   return (
-    <span className={`sync-status ${isStale ? "sync-status--stale" : "sync-status--ok"}`}>
+    <span
+      className={`sync-status ${isStale ? "sync-status--stale" : "sync-status--ok"}`}
+    >
       <span className="sync-status__indicator" aria-hidden="true" />
       <span>
         {isStale ? (
-          <>Backend sync is stale &middot; synced {timeAgo} ({formattedTime})</>
+          <>
+            Backend sync is stale &middot; synced {timeAgo} ({formattedTime})
+          </>
         ) : (
-          <>Backend last synced with Horizon: {formattedTime} &middot; synced {timeAgo}</>
+          <>
+            Backend last synced with Horizon: {formattedTime} &middot; synced{" "}
+            {timeAgo}
+          </>
         )}
       </span>
     </span>

@@ -37,4 +37,7 @@ export const tooltipProps = {
  * Bar charts draw a hover band behind the tooltip; the Recharts default is an
  * opaque light grey that reads as a bright flash on the dark theme.
  */
-export const barTooltipCursor = { fill: "var(--border-color)", fillOpacity: 0.5 };
+export const barTooltipCursor = {
+  fill: "var(--border-color)",
+  fillOpacity: 0.5,
+};

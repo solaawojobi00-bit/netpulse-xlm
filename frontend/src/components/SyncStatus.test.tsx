@@ -20,10 +20,14 @@ describe("SyncStatus", () => {
       />,
     );
 
-    expect(screen.getByText(/Backend last synced with Horizon/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Backend last synced with Horizon/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/synced 5s ago/i)).toBeInTheDocument();
     expect(container.querySelector(".sync-status--ok")).toBeInTheDocument();
-    expect(container.querySelector(".sync-status--stale")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(".sync-status--stale"),
+    ).not.toBeInTheDocument();
   });
 
   it("visibly distinguishes stale status", () => {

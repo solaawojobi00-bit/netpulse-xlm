@@ -12,7 +12,11 @@ import {
   resetAlertState,
 } from "./alerts.js";
 
-const OPTS: AlertOptions = { threshold: 0.8, hysteresis: 0.05, cooldownMs: 60_000 };
+const OPTS: AlertOptions = {
+  threshold: 0.8,
+  hysteresis: 0.05,
+  cooldownMs: 60_000,
+};
 
 /** Feeds a series of readings through the machine, collecting what it sent. */
 function run(
@@ -24,7 +28,13 @@ function run(
   let state: AlertState = initialAlertState;
   const events: string[] = [];
   readings.forEach((usage, i) => {
-    const result = nextAlertState(state, usage, "mainnet", opts, startAt + i * stepMs);
+    const result = nextAlertState(
+      state,
+      usage,
+      "mainnet",
+      opts,
+      startAt + i * stepMs,
+    );
     state = result.state;
     if (result.event) events.push(result.event.kind);
   });
@@ -126,7 +136,9 @@ describe("nextAlertState: cooldown", () => {
   });
 
   it("bounds a rapidly oscillating network to one alert per cooldown", () => {
-    const oscillation = Array.from({ length: 40 }, (_, i) => (i % 2 === 0 ? 0.95 : 0.4));
+    const oscillation = Array.from({ length: 40 }, (_, i) =>
+      i % 2 === 0 ? 0.95 : 0.4,
+    );
     // 40 readings a second apart is well inside one 60s cooldown.
     const { events } = run(oscillation, OPTS, 0, 1_000);
     expect(events.filter((e) => e === "alert")).toHaveLength(1);
@@ -154,7 +166,13 @@ describe("nextAlertState: missing readings", () => {
 describe("nextAlertState: event contents", () => {
   it("carries network, usage, threshold and a timestamp", () => {
     const at = Date.UTC(2026, 8, 4, 12, 0, 0);
-    const { event } = nextAlertState(initialAlertState, 0.93, "testnet", OPTS, at);
+    const { event } = nextAlertState(
+      initialAlertState,
+      0.93,
+      "testnet",
+      OPTS,
+      at,
+    );
 
     expect(event).toEqual({
       kind: "alert",
@@ -203,7 +221,10 @@ describe("payload formats", () => {
   });
 
   it("produces Slack blocks with plain text alongside them", () => {
-    const body = formatPayload(event, "slack") as { text: string; blocks: unknown[] };
+    const body = formatPayload(event, "slack") as {
+      text: string;
+      blocks: unknown[];
+    };
 
     // `text` is what Slack shows in the notification and in clients that do
     // not render blocks, so it must not be omitted.
@@ -214,11 +235,16 @@ describe("payload formats", () => {
   it("says recovered, not congested, on a recovery", () => {
     const recovery = { ...event, kind: "recovery" as const, usage: 0.4 };
 
-    const generic = formatPayload(recovery, "generic") as { event: string; message: string };
+    const generic = formatPayload(recovery, "generic") as {
+      event: string;
+      message: string;
+    };
     expect(generic.event).toBe("congestion.recovery");
     expect(generic.message).toContain("recovered");
 
-    const discord = formatPayload(recovery, "discord") as { embeds: { title: string }[] };
+    const discord = formatPayload(recovery, "discord") as {
+      embeds: { title: string }[];
+    };
     expect(discord.embeds[0].title).toBe("Network congestion recovered");
   });
 });
@@ -305,11 +331,15 @@ describe("delivery", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://example.test/hook");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body)).network).toBe("mainnet");
+    // `BodyInit` covers streams and typed arrays, which do not stringify
+    // usefully; this call site always sends a JSON string.
+    expect(JSON.parse(init?.body as string).network).toBe("mainnet");
   });
 
   it("reports a rejection without throwing", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("no", { status: 500 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("no", { status: 500 }),
+    );
 
     // A webhook returning 500 must not propagate into the poller.
     await expect(deliverAlert(event, config)).resolves.toBe(false);
@@ -325,11 +355,15 @@ describe("delivery", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       (_url, init) =>
         new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
         }),
     );
 
-    await expect(deliverAlert(event, { ...config, timeoutMs: 20 })).resolves.toBe(false);
+    await expect(
+      deliverAlert(event, { ...config, timeoutMs: 20 }),
+    ).resolves.toBe(false);
   });
 });
 
@@ -341,7 +375,9 @@ describe("evaluateCongestionAlert: per-network isolation", () => {
     process.env.ALERT_WEBHOOK_URL = "https://example.test/hook";
     process.env.ALERT_WEBHOOK_FORMAT = "generic";
     delete process.env.ALERT_COOLDOWN_MS;
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
   });
 
   afterEach(() => {
@@ -351,13 +387,17 @@ describe("evaluateCongestionAlert: per-network isolation", () => {
   });
 
   it("does not let a mainnet alert suppress a testnet one", async () => {
-    await expect(evaluateCongestionAlert("mainnet", 0.95, 0)).resolves.toMatchObject({
+    await expect(
+      evaluateCongestionAlert("mainnet", 0.95, 0),
+    ).resolves.toMatchObject({
       kind: "alert",
       network: "mainnet",
     });
 
     // Same instant, same cooldown — a shared cooldown would swallow this.
-    await expect(evaluateCongestionAlert("testnet", 0.95, 0)).resolves.toMatchObject({
+    await expect(
+      evaluateCongestionAlert("testnet", 0.95, 0),
+    ).resolves.toMatchObject({
       kind: "alert",
       network: "testnet",
     });
@@ -367,7 +407,9 @@ describe("evaluateCongestionAlert: per-network isolation", () => {
     await evaluateCongestionAlert("mainnet", 0.95, 0);
     await evaluateCongestionAlert("testnet", 0.95, 0);
 
-    await expect(evaluateCongestionAlert("mainnet", 0.2, 1_000)).resolves.toMatchObject({
+    await expect(
+      evaluateCongestionAlert("mainnet", 0.2, 1_000),
+    ).resolves.toMatchObject({
       kind: "recovery",
       network: "mainnet",
     });
@@ -380,7 +422,9 @@ describe("evaluateCongestionAlert: per-network isolation", () => {
     delete process.env.ALERT_WEBHOOK_URL;
     const fetchMock = vi.mocked(globalThis.fetch);
 
-    await expect(evaluateCongestionAlert("mainnet", 0.99, 0)).resolves.toBeNull();
+    await expect(
+      evaluateCongestionAlert("mainnet", 0.99, 0),
+    ).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -399,7 +443,9 @@ describe("wiring: a fee snapshot drives the alert", () => {
     resetAlertState();
     process.env.ALERT_WEBHOOK_URL = "https://example.test/hook";
     process.env.CONGESTION_ALERT_THRESHOLD = "0.8";
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
   });
 
   afterEach(() => {
@@ -428,7 +474,9 @@ describe("wiring: a fee snapshot drives the alert", () => {
 
     stores.mainnet.addFeeSnapshot(snapshot(0.95));
     // Delivery is fire-and-forget so the poll is never blocked; yield once for it.
-    await vi.waitFor(() => expect(getAlertState("mainnet").status).toBe("alerting"));
+    await vi.waitFor(() =>
+      expect(getAlertState("mainnet").status).toBe("alerting"),
+    );
 
     expect(globalThis.fetch).toHaveBeenCalledOnce();
   });
@@ -437,7 +485,9 @@ describe("wiring: a fee snapshot drives the alert", () => {
     const { stores } = await import("./poller.js");
 
     stores.testnet.addFeeSnapshot(snapshot(0.95));
-    await vi.waitFor(() => expect(getAlertState("testnet").status).toBe("alerting"));
+    await vi.waitFor(() =>
+      expect(getAlertState("testnet").status).toBe("alerting"),
+    );
 
     // A testnet snapshot must not move mainnet.
     expect(getAlertState("mainnet").status).toBe("ok");

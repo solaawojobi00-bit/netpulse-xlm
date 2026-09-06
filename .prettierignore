@@ -1,0 +1,27 @@
+# Shared by both packages, which is why their format scripts pass
+# `--ignore-path ../.prettierignore` explicitly.
+#
+# Prettier resolves a config file by walking up from each file it formats, but
+# it looks for the ignore file in the working directory only. Since the format
+# scripts run from backend/ and frontend/, this file would otherwise be found
+# by neither, and `format:check` would fail on built output -- which is how
+# that was caught.
+#
+# Generated or vendored output. Reformatting any of it produces a large diff
+# that nobody authored and that the next tool run reverts.
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# npm owns the formatting of these; `prettier --write` reflows them and the
+# next `npm install` puts them back.
+package-lock.json
+
+# Screenshot artefacts from scripts/a11y-browser-check.mjs
+frontend/a11y-shots/
+
+# Local data
+data/
+*.db
