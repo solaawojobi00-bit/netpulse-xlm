@@ -1,0 +1,34 @@
+version: 2
+
+# There is no root package.json: backend/ and frontend/ are independent installs
+# with separate lockfiles, and CI type-checks and tests them as separate jobs.
+# So each gets its own npm entry rather than one root entry with workspaces.
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - backend
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - frontend
+
+  # Covers the third-party actions pinned in .github/workflows (checkout,
+  # setup-node, gitleaks-action).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - ci
