@@ -1,7 +1,15 @@
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+import { validCloseTimeSql } from "./closeTime.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
+
+/*
+ * The rollup's close-time aggregate must agree with the health average about
+ * what counts as a usable sample, so the rule is spelled once, in closeTime.ts,
+ * and interpolated here rather than restated as a literal.
+ */
+const VALID_CLOSE_TIME = validCloseTimeSql("close_time_seconds");
 
 const DEFAULT_DB_PATH =
   process.env.NODE_ENV === "test"
@@ -44,6 +52,37 @@ export interface HistoryResponse {
   range: string;
   points: HistoryPoint[];
 }
+
+export interface TrendPoint {
+  /** YYYY-MM-DD, UTC. */
+  date: string;
+  closeTimeSeconds: number | null;
+  congestionUsage: number | null;
+  maxCongestionUsage: number | null;
+  operations: number;
+  successfulTransactions: number;
+  failedTransactions: number;
+  p50Fee: number | null;
+  p90Fee: number | null;
+}
+
+export interface TrendsResponse {
+  network: string;
+  /** 30d | 90d | 1y */
+  range: string;
+  points: TrendPoint[];
+}
+
+/**
+ * Day counts to their canonical response labels. `1y` is 365 days but must
+ * echo back as `1y`, not `365d` — the label is part of the contract the
+ * frontend's range selector round-trips through the URL.
+ */
+const TREND_RANGE_LABELS: Record<number, string> = {
+  30: "30d",
+  90: "90d",
+  365: "1y",
+};
 
 export class NetPulseDatabase {
   private db: Database.Database;
@@ -109,19 +148,42 @@ export class NetPulseDatabase {
        * "WHERE network = ? AND date >= ?" as a leftmost-prefix range scan.
        */
       CREATE TABLE IF NOT EXISTS daily_rollups (
-        network                TEXT NOT NULL,
-        date                   TEXT NOT NULL,
-        avg_close_time_seconds REAL,
-        avg_congestion_usage   REAL,
-        max_congestion_usage   REAL,
-        total_operations       INTEGER NOT NULL DEFAULT 0,
-        total_successful_tx    INTEGER NOT NULL DEFAULT 0,
-        total_failed_tx        INTEGER NOT NULL DEFAULT 0,
-        avg_fee_p50            REAL,
-        avg_fee_p90            REAL,
+        network                  TEXT NOT NULL,
+        date                     TEXT NOT NULL,
+        avg_close_time_seconds   REAL,
+        close_time_sample_count  INTEGER NOT NULL DEFAULT 0,
+        avg_congestion_usage     REAL,
+        max_congestion_usage     REAL,
+        total_operations         INTEGER NOT NULL DEFAULT 0,
+        total_successful_tx      INTEGER NOT NULL DEFAULT 0,
+        total_failed_tx          INTEGER NOT NULL DEFAULT 0,
+        avg_fee_p50              REAL,
+        avg_fee_p90              REAL,
         PRIMARY KEY (network, date)
       );
     `);
+
+    /*
+     * `CREATE TABLE IF NOT EXISTS` cannot add a column to a table that already
+     * exists, so a database created before close_time_sample_count was
+     * introduced would keep the old shape and fail on insert. This is not a
+     * migration framework and should not grow into one — it is the one-line
+     * guard that lets a schema addition reach a database that predates it.
+     */
+    this.ensureColumn(
+      "daily_rollups",
+      "close_time_sample_count",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+
+  /** Adds a column if the table does not already have it. */
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+    }>;
+    if (columns.some((c) => c.name === column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   insertLedgers(network: string, samples: LedgerSample[]): void {
@@ -203,21 +265,33 @@ export class NetPulseDatabase {
    *
    * `date` is derived from `closed_at_unix` rather than parsed out of the
    * `closed_at` text, so it cannot drift with Horizon's formatting.
+   *
+   * Invalid close times are excluded from the average rather than averaged in.
+   * This is the one place where the #84 data-quality bug would have become
+   * irreversible: a poisoned *live* average ages out of a rolling in-memory
+   * window within minutes, but a rollup row is written once and kept forever,
+   * while the raw rows that would let you recompute it are deleted at the
+   * retention boundary. `close_time_sample_count` records how many samples
+   * survived the filter, so a row built from a heavily filtered day is
+   * identifiable after the fact rather than silently confident.
    */
   private rollupCompleteDays(beforeUnix: number): void {
     this.db
       .prepare(
         `
       INSERT OR REPLACE INTO daily_rollups (
-        network, date, avg_close_time_seconds, avg_congestion_usage,
-        max_congestion_usage, total_operations, total_successful_tx,
-        total_failed_tx, avg_fee_p50, avg_fee_p90
+        network, date, avg_close_time_seconds, close_time_sample_count,
+        avg_congestion_usage, max_congestion_usage, total_operations,
+        total_successful_tx, total_failed_tx, avg_fee_p50, avg_fee_p90
       )
       WITH ledger_days AS (
         SELECT
           network,
           strftime('%Y-%m-%d', closed_at_unix / 1000, 'unixepoch') AS date,
-          AVG(close_time_seconds) AS avg_close_time_seconds,
+          AVG(CASE WHEN ${VALID_CLOSE_TIME} THEN close_time_seconds END)
+            AS avg_close_time_seconds,
+          COUNT(CASE WHEN ${VALID_CLOSE_TIME} THEN 1 END)
+            AS close_time_sample_count,
           SUM(operation_count) AS total_operations,
           SUM(successful_tx_count) AS total_successful_tx,
           SUM(failed_tx_count) AS total_failed_tx
@@ -246,6 +320,7 @@ export class NetPulseDatabase {
         d.network,
         d.date,
         l.avg_close_time_seconds,
+        COALESCE(l.close_time_sample_count, 0),
         f.avg_congestion_usage,
         f.max_congestion_usage,
         COALESCE(l.total_operations, 0),
@@ -393,6 +468,90 @@ export class NetPulseDatabase {
     };
   }
 
+  /**
+   * Daily-grain history from `daily_rollups`, oldest-first.
+   *
+   * Mirrors `getHistory`, with two deliberate differences beyond the grain:
+   * `date` rather than `timestamp`, and successful/failed transactions kept
+   * separate rather than summed — the table stores them separately and the
+   * split is more useful at daily grain.
+   *
+   * Missing dates are **not** zero-filled, matching `getHistory`. A day the
+   * backend was down has no row, and reads as a gap in the chart rather than
+   * as a day on which the network carried no traffic.
+   */
+  getTrends(network: string = "mainnet", durationDays: number = 90): TrendsResponse {
+    /*
+     * The window is a whole number of UTC days back from today's date, so a
+     * `30d` request spans today plus the 29 days before it and the boundary
+     * does not move as the day passes.
+     *
+     * The floor states that intent rather than securing it: the comparison is
+     * on `YYYY-MM-DD` strings, and subtracting whole days preserves the time
+     * of day, so an unfloored `Date.now()` would yield the same date string.
+     * It is kept because the alternative reads as "29 days and some hours ago"
+     * and would quietly start mattering if this ever compared instants.
+     */
+    const sinceUnix = floorToUtcMidnight(Date.now()) - (durationDays - 1) * DAY_MS;
+    const sinceDate = new Date(sinceUnix).toISOString().slice(0, 10);
+
+    const rows = this.db
+      .prepare(
+        `
+      SELECT
+        date,
+        avg_close_time_seconds,
+        avg_congestion_usage,
+        max_congestion_usage,
+        total_operations,
+        total_successful_tx,
+        total_failed_tx,
+        avg_fee_p50,
+        avg_fee_p90
+      FROM daily_rollups
+      WHERE network = ? AND date >= ?
+      ORDER BY date ASC
+    `,
+      )
+      .all(network, sinceDate) as Array<{
+      date: string;
+      avg_close_time_seconds: number | null;
+      avg_congestion_usage: number | null;
+      max_congestion_usage: number | null;
+      total_operations: number;
+      total_successful_tx: number;
+      total_failed_tx: number;
+      avg_fee_p50: number | null;
+      avg_fee_p90: number | null;
+    }>;
+
+    /*
+     * `!= null` rather than getHistory's truthiness check. That idiom coerces
+     * a genuine zero to null — a real reading of "no congestion" or "no fee"
+     * would be reported as missing data.
+     */
+    const round = (value: number | null, digits: number): number | null =>
+      value != null ? Number(value.toFixed(digits)) : null;
+
+    const points: TrendPoint[] = rows.map((row) => ({
+      date: row.date,
+      closeTimeSeconds: round(row.avg_close_time_seconds, 2),
+      congestionUsage: round(row.avg_congestion_usage, 4),
+      maxCongestionUsage: round(row.max_congestion_usage, 4),
+      operations: row.total_operations,
+      successfulTransactions: row.total_successful_tx,
+      failedTransactions: row.total_failed_tx,
+      p50Fee: row.avg_fee_p50 != null ? Math.round(row.avg_fee_p50) : null,
+      p90Fee: row.avg_fee_p90 != null ? Math.round(row.avg_fee_p90) : null,
+    }));
+
+    return {
+      network,
+      range: TREND_RANGE_LABELS[durationDays] ?? `${durationDays}d`,
+      points,
+    };
+  }
+
   close(): void {
     this.db.close();
   }
@@ -422,6 +581,8 @@ export const db = {
     getDb().rollupAndPrune(...args),
   getHistory: (...args: Parameters<NetPulseDatabase["getHistory"]>) =>
     getDb().getHistory(...args),
+  getTrends: (...args: Parameters<NetPulseDatabase["getTrends"]>) =>
+    getDb().getTrends(...args),
   close: () => {
     _dbInstance?.close();
     _dbInstance = null;

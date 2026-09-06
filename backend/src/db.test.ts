@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isValidCloseTimeSeconds } from "./closeTime.js";
 import { NetPulseDatabase, db as dbFacade, floorToUtcMidnight } from "./db.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
@@ -257,6 +258,7 @@ describe("NetPulseDatabase Unit Tests", () => {
       network: string;
       date: string;
       avg_close_time_seconds: number | null;
+      close_time_sample_count: number;
       avg_congestion_usage: number | null;
       max_congestion_usage: number | null;
       total_operations: number;
@@ -516,6 +518,129 @@ describe("NetPulseDatabase Unit Tests", () => {
       expect(rawLedgerCount()).toBe(1);
     });
 
+    describe("close time validity", () => {
+      /*
+       * A poisoned live average ages out of the rolling window in minutes; a
+       * poisoned rollup row is permanent, and the raw rows that would let you
+       * recompute it are deleted at the retention boundary. This is where the
+       * #84 data-quality bug would have become irreversible.
+       */
+      it("averages only the valid samples in a mixed day", () => {
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: -36192909 }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: -36192904 }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: 4 }),
+          createLedgerSample(4, at(1, 4), { closeTimeSeconds: 6 }),
+          createLedgerSample(5, at(1, 5), { closeTimeSeconds: 8 }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(6); // avg(4, 6, 8)
+        expect(row.close_time_sample_count).toBe(3);
+      });
+
+      it("yields null, not zero, for a day whose samples are all invalid", () => {
+        // No data is not the same as zero seconds.
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: -5 }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: 0 }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: null }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBeNull();
+        expect(row.close_time_sample_count).toBe(0);
+      });
+
+      it("keeps operation and transaction totals correct despite bad close times", () => {
+        // A bad close time discards that sample's close time, not the rest of
+        // the ledger's data.
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), {
+            closeTimeSeconds: -36192909,
+            operationCount: 100,
+            successfulTransactionCount: 10,
+            failedTransactionCount: 2,
+          }),
+          createLedgerSample(2, at(1, 2), {
+            closeTimeSeconds: 6,
+            operationCount: 50,
+            successfulTransactionCount: 5,
+            failedTransactionCount: 1,
+          }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(6);
+        expect(row.close_time_sample_count).toBe(1);
+        expect(row.total_operations).toBe(150);
+        expect(row.total_successful_tx).toBe(15);
+        expect(row.total_failed_tx).toBe(3);
+      });
+
+      it("excludes an infinite close time, which a bare > 0 check would pass", () => {
+        /*
+         * SQLite stores +Infinity as a real and `+Infinity > 0` is true, so a
+         * predicate of just `> 0` lets it through and the average becomes
+         * Infinity — one bad row destroying the whole day. NaN needs no guard:
+         * SQLite stores it as NULL, which AVG already skips.
+         */
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: Infinity }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: -Infinity }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: NaN }),
+          createLedgerSample(4, at(1, 4), { closeTimeSeconds: 4 }),
+          createLedgerSample(5, at(1, 5), { closeTimeSeconds: 6 }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(5); // avg(4, 6)
+        expect(Number.isFinite(row.avg_close_time_seconds!)).toBe(true);
+        expect(row.close_time_sample_count).toBe(2);
+      });
+
+      it("agrees with isValidCloseTimeSeconds sample for sample", () => {
+        /*
+         * The criterion that the SQL and the predicate share one definition,
+         * asserted rather than reviewed: the count the rollup recorded must
+         * equal the count the TypeScript predicate accepts over the same input.
+         */
+        const samples = [-36192909, -1, 0, 0.5, 4, 6, 8, Infinity, -Infinity, NaN];
+
+        db.insertLedgers(
+          "mainnet",
+          samples.map((closeTimeSeconds, i) =>
+            createLedgerSample(i + 1, at(1, 1, i), { closeTimeSeconds }),
+          ),
+        );
+
+        db.rollupAndPrune();
+
+        const expected = samples.filter(isValidCloseTimeSeconds);
+        expect(rollupFor(1)!.close_time_sample_count).toBe(expected.length);
+        expect(rollupFor(1)!.avg_close_time_seconds).toBeCloseTo(
+          expected.reduce((sum, v) => sum + v, 0) / expected.length,
+          10,
+        );
+      });
+
+      it("records a sample count of zero for a day with no ledgers at all", () => {
+        db.insertFeeSnapshot("mainnet", createFeeSnapshot(at(1)));
+
+        db.rollupAndPrune();
+
+        expect(rollupFor(1)!.close_time_sample_count).toBe(0);
+      });
+    });
+
     it("does not double-count after a failed run is retried", () => {
       db.insertLedgers("mainnet", [
         createLedgerSample(1, at(9), { operationCount: 77 }),
@@ -533,6 +658,331 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       expect(rollupFor(9)!.total_operations).toBe(77);
       expect(rawLedgerCount()).toBe(0);
+    });
+  });
+
+  describe("getTrends", () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const NOW = Date.UTC(2026, 8, 11, 14, 0, 0);
+
+    /** Writes a rollup row directly, so these tests exercise the read path only. */
+    const seedRollup = (
+      network: string,
+      date: string,
+      overrides: Partial<{
+        avg_close_time_seconds: number | null;
+        close_time_sample_count: number;
+        avg_congestion_usage: number | null;
+        max_congestion_usage: number | null;
+        total_operations: number;
+        total_successful_tx: number;
+        total_failed_tx: number;
+        avg_fee_p50: number | null;
+        avg_fee_p90: number | null;
+      }> = {},
+    ) => {
+      const row = {
+        avg_close_time_seconds: 5,
+        close_time_sample_count: 10,
+        avg_congestion_usage: 0.25,
+        max_congestion_usage: 0.5,
+        total_operations: 100,
+        total_successful_tx: 20,
+        total_failed_tx: 2,
+        avg_fee_p50: 120,
+        avg_fee_p90: 300,
+        ...overrides,
+      };
+      (db as any).db
+        .prepare(
+          `INSERT OR REPLACE INTO daily_rollups (
+            network, date, avg_close_time_seconds, close_time_sample_count,
+            avg_congestion_usage, max_congestion_usage, total_operations,
+            total_successful_tx, total_failed_tx, avg_fee_p50, avg_fee_p90
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          network,
+          date,
+          row.avg_close_time_seconds,
+          row.close_time_sample_count,
+          row.avg_congestion_usage,
+          row.max_congestion_usage,
+          row.total_operations,
+          row.total_successful_tx,
+          row.total_failed_tx,
+          row.avg_fee_p50,
+          row.avg_fee_p90,
+        );
+    };
+
+    /** The YYYY-MM-DD label `daysAgo` before today. */
+    const dateOf = (daysAgo: number): string =>
+      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS).toISOString().slice(0, 10);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("returns points oldest-first", () => {
+      seedRollup("mainnet", dateOf(3));
+      seedRollup("mainnet", dateOf(1));
+      seedRollup("mainnet", dateOf(2));
+
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points.map((p) => p.date)).toEqual([
+        dateOf(3),
+        dateOf(2),
+        dateOf(1),
+      ]);
+    });
+
+    it("maps every column onto the response shape", () => {
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: 5.6789,
+        avg_congestion_usage: 0.4213456,
+        max_congestion_usage: 0.987123,
+        total_operations: 3427194,
+        total_successful_tx: 1044821,
+        total_failed_tx: 20713,
+        avg_fee_p50: 137.6,
+        avg_fee_p90: 9042.4,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point).toEqual({
+        date: dateOf(1),
+        closeTimeSeconds: 5.68, // 2dp, matching getHistory
+        congestionUsage: 0.4213, // 4dp
+        maxCongestionUsage: 0.9871, // 4dp
+        operations: 3427194,
+        successfulTransactions: 1044821,
+        failedTransactions: 20713,
+        p50Fee: 138, // whole
+        p90Fee: 9042,
+      });
+    });
+
+    it("keeps successful and failed transactions separate rather than summing", () => {
+      seedRollup("mainnet", dateOf(1), {
+        total_successful_tx: 100,
+        total_failed_tx: 7,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.successfulTransactions).toBe(100);
+      expect(point.failedTransactions).toBe(7);
+      expect(point).not.toHaveProperty("transactions");
+    });
+
+    it("preserves a genuine zero instead of reporting it as null", () => {
+      /*
+       * getHistory's truthiness idiom would turn each of these into null. A
+       * day of zero congestion is a reading, not missing data.
+       */
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: 0,
+        avg_congestion_usage: 0,
+        max_congestion_usage: 0,
+        avg_fee_p50: 0,
+        avg_fee_p90: 0,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.closeTimeSeconds).toBe(0);
+      expect(point.congestionUsage).toBe(0);
+      expect(point.maxCongestionUsage).toBe(0);
+      expect(point.p50Fee).toBe(0);
+      expect(point.p90Fee).toBe(0);
+    });
+
+    it("passes nulls through as null", () => {
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: null,
+        avg_congestion_usage: null,
+        max_congestion_usage: null,
+        avg_fee_p50: null,
+        avg_fee_p90: null,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.closeTimeSeconds).toBeNull();
+      expect(point.congestionUsage).toBeNull();
+      expect(point.maxCongestionUsage).toBeNull();
+      expect(point.p50Fee).toBeNull();
+      expect(point.p90Fee).toBeNull();
+    });
+
+    it("does not zero-fill missing dates", () => {
+      // An outage must read as a gap, not as a day of zero traffic.
+      seedRollup("mainnet", dateOf(5));
+      seedRollup("mainnet", dateOf(1));
+
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points).toHaveLength(2);
+      expect(trends.points.map((p) => p.date)).toEqual([dateOf(5), dateOf(1)]);
+    });
+
+    it("filters at the range boundary", () => {
+      // A 30d window spans today plus the 29 days before it.
+      seedRollup("mainnet", dateOf(29)); // included
+      seedRollup("mainnet", dateOf(30)); // excluded
+      seedRollup("mainnet", dateOf(0)); // today, included if present
+
+      const trends = db.getTrends("mainnet", 30);
+
+      expect(trends.points.map((p) => p.date)).toEqual([dateOf(29), dateOf(0)]);
+    });
+
+    it("returns the same window whatever time of day the request arrives", () => {
+      /*
+       * A property worth pinning even though the current implementation gets
+       * it for free: the comparison is on date strings and subtracting whole
+       * days preserves the time of day, so the boundary cannot drift. This
+       * test exists so that a future change to instant-based filtering fails
+       * here rather than silently making the oldest day flicker in and out of
+       * the window as the day passes.
+       */
+      seedRollup("mainnet", dateOf(29));
+      seedRollup("mainnet", dateOf(30));
+
+      const at = (hour: number, minute: number): string[] => {
+        vi.setSystemTime(Date.UTC(2026, 8, 11, hour, minute, 0));
+        return db.getTrends("mainnet", 30).points.map((p) => p.date);
+      };
+
+      expect(at(0, 0)).toEqual([dateOf(29)]);
+      expect(at(12, 30)).toEqual([dateOf(29)]);
+      expect(at(23, 59)).toEqual([dateOf(29)]);
+    });
+
+    it("isolates networks", () => {
+      seedRollup("mainnet", dateOf(1), { total_operations: 10 });
+      seedRollup("testnet", dateOf(1), { total_operations: 99 });
+
+      expect(db.getTrends("mainnet", 90).points[0].operations).toBe(10);
+      expect(db.getTrends("testnet", 90).points[0].operations).toBe(99);
+    });
+
+    it("echoes the canonical range label", () => {
+      expect(db.getTrends("mainnet", 30).range).toBe("30d");
+      expect(db.getTrends("mainnet", 90).range).toBe("90d");
+      // 1y, not 365d — the label is part of the contract, not the day count.
+      expect(db.getTrends("mainnet", 365).range).toBe("1y");
+    });
+
+    it("returns an empty points array when nothing has been rolled up", () => {
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points).toEqual([]);
+      expect(trends.network).toBe("mainnet");
+      expect(trends.range).toBe("90d");
+    });
+
+    it("defaults to mainnet and 90 days", () => {
+      seedRollup("mainnet", dateOf(1));
+      seedRollup("testnet", dateOf(1));
+
+      const trends = db.getTrends();
+
+      expect(trends.network).toBe("mainnet");
+      expect(trends.range).toBe("90d");
+      expect(trends.points).toHaveLength(1);
+    });
+  });
+
+  describe("schema migration", () => {
+    it("adds close_time_sample_count to a daily_rollups table that predates it", () => {
+      /*
+       * CREATE TABLE IF NOT EXISTS is a no-op against an existing table, so a
+       * database created before this column existed would keep the old shape
+       * and fail on insert. Simulated by creating the pre-#91 table and then
+       * opening a NetPulseDatabase over the same connection's file — here, by
+       * dropping and recreating the table on an open instance and re-running
+       * the schema step.
+       */
+      const scratch = new NetPulseDatabase(":memory:");
+      try {
+        const raw = (scratch as any).db;
+        raw.exec("DROP TABLE daily_rollups");
+        raw.exec(`
+          CREATE TABLE daily_rollups (
+            network                TEXT NOT NULL,
+            date                   TEXT NOT NULL,
+            avg_close_time_seconds REAL,
+            avg_congestion_usage   REAL,
+            max_congestion_usage   REAL,
+            total_operations       INTEGER NOT NULL DEFAULT 0,
+            total_successful_tx    INTEGER NOT NULL DEFAULT 0,
+            total_failed_tx        INTEGER NOT NULL DEFAULT 0,
+            avg_fee_p50            REAL,
+            avg_fee_p90            REAL,
+            PRIMARY KEY (network, date)
+          );
+        `);
+
+        const columnNames = (): string[] =>
+          (raw.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+            name: string;
+          }>).map((c) => c.name);
+
+        expect(columnNames()).not.toContain("close_time_sample_count");
+
+        // Re-running the schema step is what a restart on an old database does.
+        (scratch as any).initSchema();
+
+        expect(columnNames()).toContain("close_time_sample_count");
+
+        // And the rollup can now write to it.
+        scratch.insertLedgers("mainnet", [
+          {
+            sequence: 1,
+            closedAt: "2020-01-01T12:00:00.000Z",
+            closeTimeSeconds: 5,
+            successfulTransactionCount: 1,
+            failedTransactionCount: 0,
+            operationCount: 3,
+            txSetOperationCount: 3,
+            baseFeeInStroops: 100,
+            maxTxSetSize: 1000,
+          },
+        ]);
+        expect(() => scratch.rollupAndPrune()).not.toThrow();
+        expect(
+          raw.prepare("SELECT close_time_sample_count c FROM daily_rollups").get().c,
+        ).toBe(1);
+      } finally {
+        scratch.close();
+      }
+    });
+
+    it("is idempotent — re-running the schema step leaves the column alone", () => {
+      const scratch = new NetPulseDatabase(":memory:");
+      try {
+        (scratch as any).initSchema();
+        (scratch as any).initSchema();
+
+        const matching = (
+          (scratch as any).db.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+            name: string;
+          }>
+        ).filter((c) => c.name === "close_time_sample_count");
+
+        expect(matching).toHaveLength(1);
+      } finally {
+        scratch.close();
+      }
     });
   });
 

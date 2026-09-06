@@ -31,6 +31,23 @@ export function isValidCloseTimeSeconds(
 }
 
 /**
+ * `isValidCloseTimeSeconds` as a SQL predicate, for aggregates that a
+ * TypeScript function cannot reach.
+ *
+ * The `< 9e999` half is not redundant, and this is the trap it exists to
+ * avoid: `9e999` overflows to `+Infinity` in SQLite, and `+Infinity > 0` is
+ * true, so a bare `> 0` check **passes an infinite value through** and turns
+ * the whole aggregate into `Infinity` — measured, not assumed. A `NaN` needs no
+ * guard: SQLite stores it as `NULL`, which every aggregate here already skips.
+ *
+ * Kept beside the predicate it mirrors so the two cannot drift into disagreeing
+ * about what counts as a usable sample.
+ */
+export function validCloseTimeSql(column: string): string {
+  return `${column} > 0 AND ${column} < 9e999`;
+}
+
+/**
  * Seconds between two ledger close timestamps, or `null` when that cannot be
  * measured — no predecessor, an unparseable timestamp, or a result that fails
  * `isValidCloseTimeSeconds`.
