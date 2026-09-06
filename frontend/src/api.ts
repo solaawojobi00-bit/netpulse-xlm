@@ -112,6 +112,55 @@ export async function fetchHistory(
   return (await res.json()) as HistoryResponse;
 }
 
+/**
+ * A single UTC day of aggregated history, from `/api/trends`.
+ *
+ * Two differences from `HistoryPoint` that matter to anything consuming both:
+ * this is keyed by `date` (a `YYYY-MM-DD` day label, not an ISO instant), and
+ * successful and failed transactions stay **separate** rather than being summed
+ * into one `transactions` field. Add them to compare against history.
+ */
+export interface TrendPoint {
+  /** The UTC day, `YYYY-MM-DD`. Not a timestamp. */
+  date: string;
+  closeTimeSeconds: number | null;
+  congestionUsage: number | null;
+  /** Peak capacity usage that day — a calm mean can still hide a spike. */
+  maxCongestionUsage: number | null;
+  operations: number;
+  successfulTransactions: number;
+  failedTransactions: number;
+  p50Fee: number | null;
+  p90Fee: number | null;
+}
+
+export interface TrendsResponse {
+  network: string;
+  range: string;
+  points: TrendPoint[];
+}
+
+/*
+ * The ranges the backend actually understands, exactly as HISTORY_RANGES does
+ * above and for the same reason: the range parsing in backend/src/index.ts maps
+ * anything else onto 90d silently, so typing them here keeps a nonsense range
+ * from reaching the request in the first place rather than getting back
+ * plausible-looking data for a window nobody asked for. Whether that leniency
+ * should become a 4xx across the whole API is #92.
+ */
+export const TREND_RANGES = ["30d", "90d", "1y"] as const;
+
+export type TrendRange = (typeof TREND_RANGES)[number];
+
+export async function fetchTrends(
+  network: Network = "mainnet",
+  range: TrendRange = "90d",
+): Promise<TrendsResponse> {
+  const res = await fetch(`/api/trends?network=${network}&range=${range}`);
+  if (!res.ok) throw new Error(`GET /api/trends failed: ${res.status}`);
+  return (await res.json()) as TrendsResponse;
+}
+
 export interface SorobanSample {
   timestamp: string;
   invocationsCount: number;
