@@ -221,6 +221,204 @@ describe("Backend API Routes", () => {
     });
   });
 
+  describe("GET /api/trends", () => {
+    /*
+     * Seeded by polling and then rolling up with a tiny retention, as the
+     * issue suggests. That exercises the real write path — poll, insert,
+     * roll up — rather than asserting against hand-written rollup rows, so
+     * these tests would catch the endpoint and the rollup disagreeing.
+     */
+    const seedYesterday = async () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const closedAt = new Date(
+        Date.UTC(
+          yesterday.getUTCFullYear(),
+          yesterday.getUTCMonth(),
+          yesterday.getUTCDate(),
+          12,
+        ),
+      ).toISOString();
+
+      vi.mocked(fetchRecentLedgers).mockResolvedValue([
+        { ...mockLedger, sequence: 9001, closedAt },
+      ]);
+      vi.mocked(fetchFeeStats).mockResolvedValue({ ...mockFee, fetchedAt: closedAt });
+
+      await pollOnce("mainnet");
+      db.rollupAndPrune();
+
+      return closedAt.slice(0, 10);
+    };
+
+    it("returns 200 with network, range and points", async () => {
+      const date = await seedYesterday();
+
+      const res = await request(app).get("/api/trends");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("network", "mainnet");
+      expect(res.body).toHaveProperty("range", "90d");
+      expect(Array.isArray(res.body.points)).toBe(true);
+
+      const point = res.body.points.find((p: { date: string }) => p.date === date);
+      expect(point).toBeDefined();
+      expect(point).toHaveProperty("closeTimeSeconds");
+      expect(point).toHaveProperty("maxCongestionUsage");
+      expect(point).toHaveProperty("successfulTransactions");
+      expect(point).toHaveProperty("failedTransactions");
+    });
+
+    it("accepts 30d, 90d and 1y, echoing the canonical label", async () => {
+      for (const [query, expected] of [
+        ["?range=30d", "30d"],
+        ["?range=90d", "90d"],
+        ["?range=1y", "1y"],
+      ]) {
+        const res = await request(app).get(`/api/trends${query}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBe(expected);
+      }
+    });
+
+    it("defaults to 90d when range is omitted", async () => {
+      const res = await request(app).get("/api/trends");
+
+      expect(res.status).toBe(200);
+      expect(res.body.range).toBe("90d");
+    });
+
+    it("coerces an unrecognised range to 90d and still returns 200", async () => {
+      /*
+       * Deliberately lenient, matching /api/history and the four other routes.
+       * Introducing 4xx here alone would make this endpoint behave unlike its
+       * siblings; tightening the whole surface at once is #92.
+       */
+      for (const bad of ["?range=10y", "?range=GARBAGE", "?range=", "?range=24h"]) {
+        const res = await request(app).get(`/api/trends${bad}`);
+        expect(res.status).toBe(200);
+        expect(res.body.range).toBe("90d");
+      }
+    });
+
+    it("respects network=testnet and coerces anything else to mainnet", async () => {
+      const testnet = await request(app).get("/api/trends?network=testnet");
+      expect(testnet.status).toBe(200);
+      expect(testnet.body.network).toBe("testnet");
+
+      for (const bad of ["?network=mars", "?network=", ""]) {
+        const res = await request(app).get(`/api/trends${bad}`);
+        expect(res.status).toBe(200);
+        expect(res.body.network).toBe("mainnet");
+      }
+    });
+
+    it("returns points oldest-first", async () => {
+      await seedYesterday();
+
+      const res = await request(app).get("/api/trends");
+      const dates = res.body.points.map((p: { date: string }) => p.date);
+
+      expect([...dates].sort()).toEqual(dates);
+    });
+
+    it("returns an empty array rather than 404 when nothing is rolled up", async () => {
+      const res = await request(app).get("/api/trends?network=testnet");
+
+      expect(res.status).toBe(200);
+      expect(res.body.points).toEqual([]);
+    });
+
+    it("carries no Content-Disposition when no format is given", async () => {
+      // The dashboard fetches this endpoint without a format; it must not
+      // start downloading a file.
+      const res = await request(app).get("/api/trends");
+
+      expect(res.headers["content-disposition"]).toBeUndefined();
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+    });
+
+    describe("export formats", () => {
+      it("serves CSV as an attachment for format=csv", async () => {
+        await seedYesterday();
+
+        const res = await request(app).get("/api/trends?format=csv");
+
+        expect(res.status).toBe(200);
+        expect(res.headers["content-type"]).toMatch(/text\/csv/);
+        expect(res.headers["content-disposition"]).toBe(
+          'attachment; filename="netpulse-trends-mainnet-90d.csv"',
+        );
+        expect(res.text.split("\r\n")[0]).toBe(
+          "network,range,date,closeTimeSeconds,congestionUsage,maxCongestionUsage," +
+            "operations,successfulTransactions,failedTransactions,p50Fee,p90Fee",
+        );
+      });
+
+      it("serves the same JSON body as an attachment for format=json", async () => {
+        await seedYesterday();
+
+        const inline = await request(app).get("/api/trends");
+        const download = await request(app).get("/api/trends?format=json");
+
+        expect(download.status).toBe(200);
+        expect(download.headers["content-disposition"]).toBe(
+          'attachment; filename="netpulse-trends-mainnet-90d.json"',
+        );
+        // Only the header differs — the body is the same resource.
+        expect(download.body).toEqual(inline.body);
+      });
+
+      it("ignores an unrecognised format and serves inline JSON", async () => {
+        for (const bad of ["?format=xml", "?format=", "?format=CSV"]) {
+          const res = await request(app).get(`/api/trends${bad}`);
+
+          expect(res.status).toBe(200);
+          expect(res.headers["content-type"]).toMatch(/application\/json/);
+          expect(res.headers["content-disposition"]).toBeUndefined();
+        }
+      });
+
+      it("applies network and range to the export and the filename", async () => {
+        const res = await request(app).get(
+          "/api/trends?network=testnet&range=1y&format=csv",
+        );
+
+        expect(res.status).toBe(200);
+        expect(res.headers["content-disposition"]).toBe(
+          'attachment; filename="netpulse-trends-testnet-1y.csv"',
+        );
+      });
+
+      it("emits one CSV row per day, nulls as empty fields", async () => {
+        const date = await seedYesterday();
+
+        const res = await request(app).get("/api/trends?format=csv");
+        const rows = res.text.split("\r\n").slice(1).filter(Boolean);
+
+        expect(rows.length).toBeGreaterThan(0);
+        const row = rows.find((r) => r.includes(date));
+        expect(row).toBeDefined();
+        expect(row).toMatch(/^mainnet,90d,/);
+        expect(row).not.toContain("null");
+      });
+
+      it("terminates the CSV with CRLF including the final row", async () => {
+        await seedYesterday();
+
+        const res = await request(app).get("/api/trends?format=csv");
+
+        expect(res.text.endsWith("\r\n")).toBe(true);
+      });
+
+      it("serves a header-only CSV when nothing is rolled up", async () => {
+        const res = await request(app).get("/api/trends?network=testnet&format=csv");
+
+        expect(res.status).toBe(200);
+        expect(res.text.split("\r\n").filter(Boolean)).toHaveLength(1);
+      });
+    });
+  });
+
   describe("GET /api/soroban", () => {
     it("returns Soroban metrics with invocation counts and rates", async () => {
       vi.mocked(fetchRecentLedgers).mockResolvedValue([mockLedger]);

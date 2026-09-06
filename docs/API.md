@@ -15,6 +15,7 @@ document says so instead of describing what it ought to do.
 - [`GET /api/ledgers/recent`](#get-apiledgersrecent)
 - [`GET /api/fees/recent`](#get-apifeesrecent)
 - [`GET /api/history`](#get-apihistory)
+- [`GET /api/trends`](#get-apitrends)
 - [`GET /api/soroban`](#get-apisoroban)
 - [`GET /api/operations/breakdown`](#get-apioperationsbreakdown)
 - [`/ws` WebSocket channel](#ws-websocket-channel)
@@ -35,12 +36,13 @@ handler described under [Errors](#errors), including on a path that exists:
 `POST /api/health` is a `404`, not a `405`.
 
 **Content type.** Every route returns `application/json; charset=utf-8`, except
-`GET /api/history?format=csv` and error pages.
+`GET /api/history?format=csv`, `GET /api/trends?format=csv`, and error pages.
 
 **CORS.** Governed by `CORS_ORIGIN` (comma-separated, default
 `http://localhost:5173`; `*` disables checking). The same allowlist governs the
 WebSocket upgrade. No response headers are added to the CORS exposed-headers
-list, which matters for [history exports](#get-apihistory).
+list, which matters for [history](#get-apihistory) and
+[trends](#get-apitrends) exports.
 
 ### The `network` query parameter
 
@@ -429,12 +431,16 @@ Drop it before computing rates.
 
 ### Retention
 
-Rows older than **7 days** are deleted, but pruning runs **once, at process
-start**, not on a schedule. A long-lived process accumulates rows past the
-retention window until its next restart.
+Raw ledger and fee rows — the ones this route reads — are kept for **7-8 whole
+UTC days**, then deleted. The prune cutoff is floored to UTC midnight, so a day
+in storage is either complete or absent, never a fragment; the window is
+therefore never shorter than 7 days and sometimes up to a day longer. Pruning
+runs at process start and every 6 hours thereafter.
 
-This is storage retention, not queryable range: the read API caps at 24 hours,
-so the older days are not reachable through the API in any case.
+This is storage retention, not queryable range: this route caps at 24 hours, so
+the older days are not reachable here in any case. They are reachable at daily
+grain through [`GET /api/trends`](#get-apitrends), which is backed by a second
+table that is kept indefinitely.
 
 History only goes back as far as this backend has actually been running. There
 is no backfill from Horizon.
@@ -478,6 +484,161 @@ The second row shows an empty `closeTimeSeconds` — a fee-only bucket.
 yourself — the pattern is `netpulse-history-<network>-<range>.<ext>` and both
 parts are in the JSON body — or trigger the download by navigation rather than
 by `fetch`.
+
+## `GET /api/trends`
+
+Daily-grain history from SQLite, for ranges longer than `/api/history` can
+serve. Backed by the `daily_rollups` table, which is written before raw rows
+are pruned and **kept indefinitely**.
+
+**Query parameters:** `network`, `range`, `format`.
+
+### The `range` parameter
+
+Only `30d` and `1y` are recognised. **Every other value, including the string
+`90d` itself, falls through to 90 days:**
+
+```ts
+req.query.range === "30d" ? 30 : req.query.range === "1y" ? 365 : 90
+```
+
+| Request | Window | Echoed `range` |
+| --- | --- | --- |
+| `?range=30d` | 30 days | `"30d"` |
+| `?range=90d` | 90 days | `"90d"` |
+| `?range=1y` | 365 days | `"1y"` |
+| *omitted* | 90 days | `"90d"` |
+| `?range=10y` | 90 days | `"90d"` |
+| `?range=GARBAGE` | 90 days | `"90d"` |
+
+Same lenient coercion as `/api/history` — an unrecognised range is silently
+downgraded rather than rejected, and the echoed field is how you detect it.
+`1y` echoes as `"1y"`, not `"365d"`.
+
+The window is measured in **whole UTC days** and includes today's date if a row
+for it exists, so `30d` spans today plus the 29 days before it. The boundary
+does not move with the clock during the day.
+
+### Response
+
+```json
+{
+  "network": "mainnet",
+  "range": "90d",
+  "points": [
+    {
+      "date": "2026-09-04",
+      "closeTimeSeconds": 5.62,
+      "congestionUsage": 0.4213,
+      "maxCongestionUsage": 0.9871,
+      "operations": 3427194,
+      "successfulTransactions": 1044821,
+      "failedTransactions": 20713,
+      "p50Fee": 137,
+      "p90Fee": 9042
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `network` | `string` | The resolved network. |
+| `range` | `string` | The normalised range, one of `"30d"`, `"90d"`, `"1y"`. |
+| `points[].date` | `string` | The UTC day, `YYYY-MM-DD`. Not a timestamp. |
+| `points[].closeTimeSeconds` | `number \| null` | Mean ledger close time over the day, 2 decimal places. Averaged over **usable samples only** — non-finite and non-positive values are excluded, not averaged in. `null` when the day had no usable sample. |
+| `points[].congestionUsage` | `number \| null` | Mean capacity usage over the day, 4 decimal places. |
+| `points[].maxCongestionUsage` | `number \| null` | **Peak** capacity usage over the day, 4 decimal places. A day can look calm on the mean and still have spiked. |
+| `points[].operations` | `number` | Total operations over the day. |
+| `points[].successfulTransactions` | `number` | Successful transactions only. |
+| `points[].failedTransactions` | `number` | Failed transactions only. |
+| `points[].p50Fee` | `number \| null` | Mean p50 fee over the day, rounded to an integer. |
+| `points[].p90Fee` | `number \| null` | Mean p90 fee, rounded to an integer. |
+
+### Differences from `/api/history`
+
+Three, all deliberate:
+
+**1. `date`, not `timestamp`.** A `YYYY-MM-DD` UTC day label, not an ISO
+instant. Do not parse it as a timestamp and assume a timezone.
+
+**2. Transactions are split, not summed.** `/api/history` returns a single
+`transactions` field holding successful **plus** failed. This route keeps
+`successfulTransactions` and `failedTransactions` separate, because the table
+stores them separately and the split is more useful at daily grain. To compare
+the two routes, add them.
+
+**3. `null` means "no data", not "no data *or* zero".** `/api/history` assigns
+its nullable fields with a truthiness check, so a genuine `0` is reported as
+`null` there. This route uses an explicit null check, so a `0` reads as `0`.
+
+### Missing days are gaps, not zeroes
+
+Only dates that exist in the table are returned. A day the backend was not
+running produces **no point at all** — it is not zero-filled.
+
+This matters for charting: a gap means "we do not know", while a zero would
+claim the network carried no traffic that day. Consumers plotting a continuous
+axis must fill or break the series themselves, and should render a gap rather
+than a drop to zero.
+
+### Retention and coverage
+
+Rows here are **never deleted**. The table gains roughly 365 rows per year per
+network.
+
+But the table only holds days this backend actually observed. It was introduced
+alongside the rollup mechanism, so it has no rows for any day that was pruned
+before that shipped, and none for days the process was down. A `1y` request on
+a recently deployed backend returns however many days exist, which may be very
+few. There is no backfill from Horizon.
+
+Today's date only appears once the day is complete. The in-progress UTC day is
+never rolled up — a partial day would be indistinguishable from a whole one
+afterwards — so the newest point is normally yesterday.
+
+### Export formats
+
+Identical in shape to [history's](#export-formats). `format` turns the same
+resource into a download; `network` and `range` apply unchanged.
+
+| Request | Status | `Content-Type` | `Content-Disposition` |
+| --- | --- | --- | --- |
+| `?format=csv` | 200 | `text/csv; charset=utf-8` | `attachment; filename="netpulse-trends-<network>-<range>.csv"` |
+| `?format=json` | 200 | `application/json; charset=utf-8` | `attachment; filename="netpulse-trends-<network>-<range>.json"` |
+| *omitted* | 200 | `application/json; charset=utf-8` | *absent* |
+| any other value | 200 | `application/json; charset=utf-8` | *absent* |
+
+An unrecognised `format` is **not** an error; it returns the ordinary inline
+JSON. `format=json` returns a body byte-identical to the inline response and
+differs only by the header. The filename says `trends`, so a trends export
+never collides with a history export of the same network and range.
+
+```bash
+curl -OJ "http://localhost:4000/api/trends?network=testnet&range=1y&format=csv"
+```
+
+**CSV details.** One row per day, with a header row. `network` and `range` are
+denormalised onto every row so a saved file stands alone. Rows are terminated
+with CRLF **including the final row**, per RFC 4180. Nulls are written as empty
+fields, not the text `null`:
+
+```
+network,range,date,closeTimeSeconds,congestionUsage,maxCongestionUsage,operations,successfulTransactions,failedTransactions,p50Fee,p90Fee
+mainnet,90d,2026-09-04,5.62,0.4213,0.9871,3427194,1044821,20713,137,9042
+mainnet,90d,2026-09-05,,,,12,3,0,,
+```
+
+The second row is a day with ledgers but no fee snapshots. Note that its
+`failedTransactions` is `0` rather than empty — unlike the history export, an
+empty field here means **no data**, never a zero aggregate.
+
+**Columns differ from the history export in two ways**, both following the JSON:
+`date` replaces `timestamp`, and `successfulTransactions` / `failedTransactions`
+are separate columns where history has a single summed `transactions`.
+
+**Cross-origin browser clients cannot read the filename**, for the same reason
+as [history exports](#export-formats).
 
 ## `GET /api/soroban`
 
@@ -712,13 +873,17 @@ Every nullable field, and what actually makes it null.
 | `/api/ledgers/recent` | `closeTimeSeconds` | The ledger is the oldest in its batch, so has no predecessor to measure against. |
 | `/api/fees/recent` | — | No nullable fields. The array itself may be empty. |
 | `/api/history` | `closeTimeSeconds`, `congestionUsage`, `p50Fee`, `p90Fee` | No rows of that kind in the bucket, **or** the aggregate computed to exactly zero. The two are indistinguishable. |
+| `/api/trends` | `closeTimeSeconds` | The day had no *usable* close-time sample — no ledger rows, or every sample failed the validity rule. A genuine zero is impossible here, since zero is not a usable sample. |
+| `/api/trends` | `congestionUsage`, `maxCongestionUsage`, `p50Fee`, `p90Fee` | No fee snapshots were recorded that day. Unlike `/api/history`, a genuine zero reads as `0`, not null. |
 | `/api/soroban` | `invocationsPerSecond` | No samples at all. With exactly one sample it is `0`, not null. |
 | `/api/operations/breakdown` | `windowSeconds` | Fewer than two samples, so there is no span. |
 
 Fields that are **never** null, and are safe to use unguarded:
 `status`, `horizonUrl`, `congestion.band`, `congestion.alertThreshold`,
 `recentLedgerCount`, `network`, `range`, `points[].operations`,
-`points[].transactions`, every field of a `FeeSnapshot`, every `LedgerSample`
+`points[].transactions`, `points[].date`,
+`points[].successfulTransactions`, `points[].failedTransactions`,
+every field of a `FeeSnapshot`, every `LedgerSample`
 field except `closeTimeSeconds`, `sampleCount`, `totalOperations`,
 `distinctTypes`, and every field of a `breakdown` row.
 

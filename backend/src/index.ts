@@ -2,7 +2,12 @@ import cors from "cors";
 import express from "express";
 import type { Network } from "./horizon.js";
 import { buildHealthResponse } from "./metrics.js";
-import { historyExportFilename, historyToCsv } from "./csv.js";
+import {
+  historyExportFilename,
+  historyToCsv,
+  trendsExportFilename,
+  trendsToCsv,
+} from "./csv.js";
 import { db } from "./db.js";
 import {
   buildOperationBreakdownResponse,
@@ -23,6 +28,47 @@ const SHUTDOWN_TIMEOUT_MS = Number(
 
 function parseNetwork(req: express.Request): Network {
   return req.query.network === "testnet" ? "testnet" : "mainnet";
+}
+
+/**
+ * Sends a resource either inline or as a download, according to `format`.
+ *
+ * `format` is a representation of the same resource rather than a second
+ * endpoint, so it shares the route's `network` and `range` parsing and cannot
+ * drift from it.
+ *
+ * Only an explicit `csv` or `json` triggers a download. Anything else —
+ * including an unrecognised value — serves the ordinary inline JSON with **no**
+ * `Content-Disposition`, so the dashboard's plain fetch never starts saving a
+ * file.
+ */
+function sendExportable<T>(
+  req: express.Request,
+  res: express.Response,
+  body: T,
+  toCsv: (body: T) => string,
+  filename: (body: T, extension: "csv" | "json") => string,
+): void {
+  const format = typeof req.query.format === "string" ? req.query.format : undefined;
+
+  if (format === "csv") {
+    res
+      .type("text/csv; charset=utf-8")
+      .setHeader("Content-Disposition", `attachment; filename="${filename(body, "csv")}"`);
+    res.send(toCsv(body));
+    return;
+  }
+
+  if (format === "json") {
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename(body, "json")}"`,
+    );
+    res.json(body);
+    return;
+  }
+
+  res.json(body);
 }
 
 export function createApp(): express.Express {
@@ -58,38 +104,22 @@ export function createApp(): express.Express {
     const range = req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
     const history = db.getHistory(network, range);
 
-    /*
-     * Export is a representation of the same resource, so it shares this route
-     * and its network/range parsing rather than duplicating them in a second
-     * endpoint that could drift.
-     *
-     * Only an explicit format triggers a download. With no format the response
-     * is byte-identical to before and carries no Content-Disposition, so the
-     * frontend's existing fetch of this endpoint is unaffected.
-     */
-    const format = typeof req.query.format === "string" ? req.query.format : undefined;
+    sendExportable(req, res, history, historyToCsv, historyExportFilename);
+  });
 
-    if (format === "csv") {
-      res
-        .type("text/csv; charset=utf-8")
-        .setHeader(
-          "Content-Disposition",
-          `attachment; filename="${historyExportFilename(history, "csv")}"`,
-        );
-      res.send(historyToCsv(history));
-      return;
-    }
+  /*
+   * Validation matches /api/history exactly, which means lenient coercion: an
+   * unrecognised range becomes the default and the response is 200. There is
+   * no error vocabulary anywhere in this API today, and introducing 4xx on one
+   * new endpoint would make it behave unlike its five siblings for no stated
+   * reason. Tightening validation across the whole surface at once is #92.
+   */
+  app.get("/api/trends", (req, res) => {
+    const network = parseNetwork(req);
+    const range = req.query.range === "30d" ? 30 : req.query.range === "1y" ? 365 : 90;
+    const trends = db.getTrends(network, range);
 
-    if (format === "json") {
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${historyExportFilename(history, "json")}"`,
-      );
-      res.json(history);
-      return;
-    }
-
-    res.json(history);
+    sendExportable(req, res, trends, trendsToCsv, trendsExportFilename);
   });
 
   app.get("/api/soroban", (req, res) => {

@@ -1,4 +1,4 @@
-import type { HistoryResponse } from "./db.js";
+import type { HistoryResponse, TrendsResponse } from "./db.js";
 
 /*
  * A hand-rolled writer rather than a dependency: the row shape is flat with a
@@ -41,16 +41,41 @@ function formatCsvValue(value: string | number | null | undefined): string {
   return escapeCsvValue(String(value));
 }
 
+/** A single value a CSV cell can hold before formatting. */
+export type CsvValue = string | number | null | undefined;
+
+/**
+ * Serialises a header row plus `rows` to CSV.
+ *
+ * Rows are terminated with CRLF per RFC 4180, **including the final row**,
+ * which is what Excel expects. A row supplies its cells by column name; a
+ * column with no entry becomes an empty field rather than shifting later
+ * columns left, so a partial row cannot silently corrupt the file.
+ *
+ * Generic over the column tuple so `rows` is checked against the columns the
+ * caller declared — passing a row keyed by a name not in `columns` is a type
+ * error rather than a silently dropped value.
+ */
+export function buildCsv<const Columns extends readonly string[]>(
+  columns: Columns,
+  rows: readonly Readonly<Record<Columns[number], CsvValue>>[],
+): string {
+  const lines = [columns.join(",")];
+
+  for (const row of rows) {
+    lines.push(columns.map((column) => formatCsvValue(row[column as Columns[number]])).join(","));
+  }
+
+  return lines.join("\r\n") + "\r\n";
+}
+
 /**
  * Serialises a history response to CSV, one row per 5-minute bucket.
- * Rows are terminated with CRLF per RFC 4180, including the final row, which
- * is what Excel expects.
  */
 export function historyToCsv(history: HistoryResponse): string {
-  const lines = [HISTORY_CSV_COLUMNS.join(",")];
-
-  for (const point of history.points) {
-    const row: Record<(typeof HISTORY_CSV_COLUMNS)[number], string | number | null> = {
+  return buildCsv(
+    HISTORY_CSV_COLUMNS,
+    history.points.map((point) => ({
       network: history.network,
       range: history.range,
       timestamp: point.timestamp,
@@ -60,17 +85,84 @@ export function historyToCsv(history: HistoryResponse): string {
       transactions: point.transactions,
       p50Fee: point.p50Fee,
       p90Fee: point.p90Fee,
-    };
-    lines.push(HISTORY_CSV_COLUMNS.map((c) => formatCsvValue(row[c])).join(","));
-  }
-
-  return lines.join("\r\n") + "\r\n";
+    })),
+  );
 }
 
-/** Stable, sortable filename that records what was exported. */
+/**
+ * Stable, sortable filename that records what was exported.
+ *
+ * `resource` names what is being exported — `history`, `trends` — so a reader
+ * with several downloads in one folder can tell them apart, and so the two
+ * cannot collide on `network` and `range` alone.
+ */
+export function exportFilename(
+  resource: string,
+  network: string,
+  range: string,
+  extension: "csv" | "json",
+): string {
+  return `netpulse-${resource}-${network}-${range}.${extension}`;
+}
+
+/** `exportFilename` bound to the history resource. */
 export function historyExportFilename(
   history: HistoryResponse,
   extension: "csv" | "json",
 ): string {
-  return `netpulse-history-${history.network}-${history.range}.${extension}`;
+  return exportFilename("history", history.network, history.range, extension);
+}
+
+/**
+ * Columns in emitted order, mirroring `HISTORY_CSV_COLUMNS`.
+ *
+ * `network` and `range` are denormalised onto every row for the same reason as
+ * history: an exported file should stand on its own without the request that
+ * produced it.
+ *
+ * Successful and failed transactions stay separate rather than summed, as they
+ * are in the JSON. Summing them here to match history's single `transactions`
+ * column would discard information the table holds, and a spreadsheet can add
+ * two columns far more easily than it can recover one.
+ */
+export const TRENDS_CSV_COLUMNS = [
+  "network",
+  "range",
+  "date",
+  "closeTimeSeconds",
+  "congestionUsage",
+  "maxCongestionUsage",
+  "operations",
+  "successfulTransactions",
+  "failedTransactions",
+  "p50Fee",
+  "p90Fee",
+] as const;
+
+/** Serialises a trends response to CSV, one row per day. */
+export function trendsToCsv(trends: TrendsResponse): string {
+  return buildCsv(
+    TRENDS_CSV_COLUMNS,
+    trends.points.map((point) => ({
+      network: trends.network,
+      range: trends.range,
+      date: point.date,
+      closeTimeSeconds: point.closeTimeSeconds,
+      congestionUsage: point.congestionUsage,
+      maxCongestionUsage: point.maxCongestionUsage,
+      operations: point.operations,
+      successfulTransactions: point.successfulTransactions,
+      failedTransactions: point.failedTransactions,
+      p50Fee: point.p50Fee,
+      p90Fee: point.p90Fee,
+    })),
+  );
+}
+
+/** `exportFilename` bound to the trends resource. */
+export function trendsExportFilename(
+  trends: TrendsResponse,
+  extension: "csv" | "json",
+): string {
+  return exportFilename("trends", trends.network, trends.range, extension);
 }
