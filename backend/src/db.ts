@@ -93,6 +93,34 @@ export class NetPulseDatabase {
       );
 
       CREATE INDEX IF NOT EXISTS idx_fees_time ON fee_snapshots (network, fetched_at_unix);
+
+      /*
+       * Daily-grain history, kept indefinitely. Raw ledgers and fee snapshots
+       * are deleted at the retention boundary, so without this a day older
+       * than the window is gone for good; ~365 rows per year per network is a
+       * cheap price for keeping its shape.
+       *
+       * Fee and congestion columns are nullable because a day can have ledger
+       * rows and no fee snapshots, or the reverse — the same outer-join case
+       * getHistory already handles at bucket grain. The count columns are NOT
+       * NULL: a day that reached this table had rows, so zero means zero.
+       *
+       * No extra index. The primary key's implicit index already serves
+       * "WHERE network = ? AND date >= ?" as a leftmost-prefix range scan.
+       */
+      CREATE TABLE IF NOT EXISTS daily_rollups (
+        network                TEXT NOT NULL,
+        date                   TEXT NOT NULL,
+        avg_close_time_seconds REAL,
+        avg_congestion_usage   REAL,
+        max_congestion_usage   REAL,
+        total_operations       INTEGER NOT NULL DEFAULT 0,
+        total_successful_tx    INTEGER NOT NULL DEFAULT 0,
+        total_failed_tx        INTEGER NOT NULL DEFAULT 0,
+        avg_fee_p50            REAL,
+        avg_fee_p90            REAL,
+        PRIMARY KEY (network, date)
+      );
     `);
   }
 
@@ -147,6 +175,116 @@ export class NetPulseDatabase {
     );
   }
 
+  /** Deletes raw rows below an already-floored cutoff, from both tables. */
+  private deleteRawBefore(cutoff: number): void {
+    this.db.prepare("DELETE FROM ledgers WHERE closed_at_unix < ?").run(cutoff);
+    this.db.prepare("DELETE FROM fee_snapshots WHERE fetched_at_unix < ?").run(cutoff);
+  }
+
+  /**
+   * Summarises every complete UTC day present in raw into `daily_rollups`.
+   *
+   * `beforeUnix` is the start of the in-progress UTC day, which is excluded —
+   * a day still accumulating ledgers would be summarised as a fragment and
+   * then, once it completed, be indistinguishable from a whole one.
+   *
+   * The day list is derived from the raw rows themselves rather than from the
+   * retention boundary, which is what makes this idempotent. Given #90's
+   * whole-day guarantee, a day still present in raw is *always* complete, so
+   * recomputing it is exact; a day already pruned has no raw rows, so it never
+   * appears here and its existing rollup row is never touched. There is no
+   * state in which a partial day is rolled up.
+   *
+   * Consequently this covers days 1-7, not only the day aging out. Rolling up
+   * just the boundary day would leave a seven-day hole at the right edge of a
+   * 30d or 90d chart. Recomputing the rest is a grouped index scan a few times
+   * a day, and `INSERT OR REPLACE` makes it self-correcting for ledgers that
+   * arrive late.
+   *
+   * `date` is derived from `closed_at_unix` rather than parsed out of the
+   * `closed_at` text, so it cannot drift with Horizon's formatting.
+   */
+  private rollupCompleteDays(beforeUnix: number): void {
+    this.db
+      .prepare(
+        `
+      INSERT OR REPLACE INTO daily_rollups (
+        network, date, avg_close_time_seconds, avg_congestion_usage,
+        max_congestion_usage, total_operations, total_successful_tx,
+        total_failed_tx, avg_fee_p50, avg_fee_p90
+      )
+      WITH ledger_days AS (
+        SELECT
+          network,
+          strftime('%Y-%m-%d', closed_at_unix / 1000, 'unixepoch') AS date,
+          AVG(close_time_seconds) AS avg_close_time_seconds,
+          SUM(operation_count) AS total_operations,
+          SUM(successful_tx_count) AS total_successful_tx,
+          SUM(failed_tx_count) AS total_failed_tx
+        FROM ledgers
+        WHERE closed_at_unix < ?
+        GROUP BY network, date
+      ),
+      fee_days AS (
+        SELECT
+          network,
+          strftime('%Y-%m-%d', fetched_at_unix / 1000, 'unixepoch') AS date,
+          AVG(ledger_capacity_usage) AS avg_congestion_usage,
+          MAX(ledger_capacity_usage) AS max_congestion_usage,
+          AVG(fee_charged_p50) AS avg_fee_p50,
+          AVG(fee_charged_p90) AS avg_fee_p90
+        FROM fee_snapshots
+        WHERE fetched_at_unix < ?
+        GROUP BY network, date
+      ),
+      days AS (
+        SELECT network, date FROM ledger_days
+        UNION
+        SELECT network, date FROM fee_days
+      )
+      SELECT
+        d.network,
+        d.date,
+        l.avg_close_time_seconds,
+        f.avg_congestion_usage,
+        f.max_congestion_usage,
+        COALESCE(l.total_operations, 0),
+        COALESCE(l.total_successful_tx, 0),
+        COALESCE(l.total_failed_tx, 0),
+        f.avg_fee_p50,
+        f.avg_fee_p90
+      FROM days d
+      LEFT JOIN ledger_days l ON l.network = d.network AND l.date = d.date
+      LEFT JOIN fee_days f ON f.network = d.network AND f.date = d.date
+    `,
+      )
+      .run(beforeUnix, beforeUnix);
+  }
+
+  /**
+   * Rolls every complete UTC day into `daily_rollups`, then deletes the raw
+   * rows that have aged out — both in one transaction.
+   *
+   * This is the production entry point. `pruneOlderThan` remains as the raw
+   * delete primitive but is deliberately not reachable from the `db` facade,
+   * because deleting a day without summarising it first is a one-way door.
+   *
+   * The single transaction is what makes a crash safe. Rolling up and then
+   * deleting as two units would allow a failure between them to leave either
+   * a rolled-up day whose raw rows survive — double-counted on the next run —
+   * or deleted rows with no rollup, which is a permanent gap.
+   */
+  rollupAndPrune(retentionMs: number = RETENTION_MS): void {
+    const now = Date.now();
+    const cutoff = floorToUtcMidnight(now - retentionMs);
+    const startOfToday = floorToUtcMidnight(now);
+
+    this.db.transaction(() => {
+      this.rollupCompleteDays(startOfToday);
+      this.deleteRawBefore(cutoff);
+    })();
+  }
+
   /**
    * Deletes raw rows older than the retention window, rounded down so that
    * only whole UTC days are ever removed.
@@ -162,11 +300,12 @@ export class NetPulseDatabase {
    * Flooring the cutoff to UTC midnight trades an exact rolling seven days for
    * **7-8 whole UTC days**: never fewer than `RETENTION_DAYS`, sometimes up to
    * one more, and every day in the store either complete or absent.
+   *
+   * Deletes raw rows *without* rolling them up first, so it is not exposed on
+   * the `db` facade. Use `rollupAndPrune` in production.
    */
   pruneOlderThan(retentionMs: number = RETENTION_MS): void {
-    const cutoff = floorToUtcMidnight(Date.now() - retentionMs);
-    this.db.prepare("DELETE FROM ledgers WHERE closed_at_unix < ?").run(cutoff);
-    this.db.prepare("DELETE FROM fee_snapshots WHERE fetched_at_unix < ?").run(cutoff);
+    this.deleteRawBefore(floorToUtcMidnight(Date.now() - retentionMs));
   }
 
   getHistory(network: string = "mainnet", durationHours: number = 24): HistoryResponse {
@@ -273,8 +412,14 @@ export const db = {
     getDb().insertLedgers(...args),
   insertFeeSnapshot: (...args: Parameters<NetPulseDatabase["insertFeeSnapshot"]>) =>
     getDb().insertFeeSnapshot(...args),
-  pruneOlderThan: (...args: Parameters<NetPulseDatabase["pruneOlderThan"]>) =>
-    getDb().pruneOlderThan(...args),
+  /*
+   * `pruneOlderThan` is deliberately absent. It deletes raw rows without
+   * summarising them first, which is a one-way door — the only reachable
+   * production entry point is the safe one. It remains a method on the class
+   * for tests that need the delete primitive on its own.
+   */
+  rollupAndPrune: (...args: Parameters<NetPulseDatabase["rollupAndPrune"]>) =>
+    getDb().rollupAndPrune(...args),
   getHistory: (...args: Parameters<NetPulseDatabase["getHistory"]>) =>
     getDb().getHistory(...args),
   close: () => {
