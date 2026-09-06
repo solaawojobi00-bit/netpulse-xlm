@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { closeTimeSecondsBetween } from "./closeTime.js";
 import { logger } from "./logger.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
@@ -115,11 +116,10 @@ export async function fetchRecentLedgers(
 
   return chronological.map((record, index): LedgerSample => {
     const previous = chronological[index - 1];
-    const closeTimeSeconds = previous
-      ? (new Date(record.closed_at).getTime() -
-          new Date(previous.closed_at).getTime()) /
-        1000
-      : null;
+    const closeTimeSeconds = closeTimeSecondsBetween(
+      previous?.closed_at,
+      record.closed_at,
+    );
 
     return {
       sequence: record.sequence,
@@ -167,13 +167,20 @@ export async function fetchRecentOperations(
   return data._embedded.records;
 }
 
+/**
+ * Normalises a streamed Horizon record.
+ *
+ * `prevClosedAt` must be the close time of the ledger that immediately
+ * precedes `record` **by sequence** — not merely the newest ledger the caller
+ * happens to hold. Passing the latter is what produced close times of around
+ * -36,000,000 seconds for stale records (#84). Callers that cannot identify
+ * the predecessor should pass nothing and get `null`.
+ */
 export function recordToSample(
   record: HorizonLedgerRecord,
   prevClosedAt?: string | null,
 ): LedgerSample {
-  const closeTimeSeconds = prevClosedAt
-    ? (new Date(record.closed_at).getTime() - new Date(prevClosedAt).getTime()) / 1000
-    : null;
+  const closeTimeSeconds = closeTimeSecondsBetween(prevClosedAt, record.closed_at);
 
   return {
     sequence: record.sequence,

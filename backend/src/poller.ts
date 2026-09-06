@@ -351,9 +351,21 @@ export async function startStreamForNetwork(
     logger.warn("Initial warm-up failed", { component: "stream", network, err });
   }
 
-  // Determine starting cursor from newest ledger sequence, or fallback to "now"
-  let cursor =
-    currentStore.getLedgers().at(-1)?.sequence?.toString() ?? "now";
+  /*
+   * Horizon's /ledgers?cursor= expects a paging token. This previously seeded
+   * the newest stored ledger's *sequence*, which is a different kind of
+   * identifier — Horizon reinterprets it, and a freshly started backend was
+   * observed streaming ledgers from fourteen months earlier alongside current
+   * ones (#84).
+   *
+   * "now" is the only correct seed available here: the warm-up above returns
+   * LedgerSample, which does not carry a paging token. The loop below advances
+   * the cursor from record.paging_token, so every reconnect after the first
+   * resumes from a real token. The cost is a possible gap of the ledgers that
+   * closed between the warm-up and the stream opening — a few seconds at
+   * process start, against months of wrong data before.
+   */
+  let cursor = "now";
   let backoffDelay = 1000;
 
   const { connectHorizonLedgerStream, recordToSample } = await import("./horizon.js");
@@ -365,15 +377,29 @@ export async function startStreamForNetwork(
         url,
         cursor,
         (record) => {
+          /*
+           * Only a paging token is a valid cursor. The previous fallback to
+           * String(record.sequence) reintroduced the seeding bug on any record
+           * that arrived without a token; leaving the cursor untouched instead
+           * means a reconnect resumes from the last known-good token.
+           */
           if (record.paging_token) {
             cursor = record.paging_token;
-          } else if (record.sequence) {
-            cursor = String(record.sequence);
           }
 
           const existingLedgers = currentStore.getLedgers();
-          const prevClosedAt = existingLedgers.at(-1)?.closedAt;
-          const sample = recordToSample(record, prevClosedAt);
+          /*
+           * The ledger this one actually follows, by sequence — not simply the
+           * newest in the store. Taking the delta against `.at(-1)` gave every
+           * stale or out-of-order record a close time measured against a much
+           * later timestamp, which is where the large negative values came
+           * from (#84). With no predecessor in the window the close time is
+           * unknown, and recordToSample reports null.
+           */
+          const predecessor = existingLedgers.find(
+            (l) => l.sequence === record.sequence - 1,
+          );
+          const sample = recordToSample(record, predecessor?.closedAt);
 
           currentStore.setLedgers([sample]);
           db.insertLedgers(network, [sample]);
