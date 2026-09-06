@@ -661,6 +661,247 @@ describe("NetPulseDatabase Unit Tests", () => {
     });
   });
 
+  describe("getTrends", () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const NOW = Date.UTC(2026, 8, 11, 14, 0, 0);
+
+    /** Writes a rollup row directly, so these tests exercise the read path only. */
+    const seedRollup = (
+      network: string,
+      date: string,
+      overrides: Partial<{
+        avg_close_time_seconds: number | null;
+        close_time_sample_count: number;
+        avg_congestion_usage: number | null;
+        max_congestion_usage: number | null;
+        total_operations: number;
+        total_successful_tx: number;
+        total_failed_tx: number;
+        avg_fee_p50: number | null;
+        avg_fee_p90: number | null;
+      }> = {},
+    ) => {
+      const row = {
+        avg_close_time_seconds: 5,
+        close_time_sample_count: 10,
+        avg_congestion_usage: 0.25,
+        max_congestion_usage: 0.5,
+        total_operations: 100,
+        total_successful_tx: 20,
+        total_failed_tx: 2,
+        avg_fee_p50: 120,
+        avg_fee_p90: 300,
+        ...overrides,
+      };
+      (db as any).db
+        .prepare(
+          `INSERT OR REPLACE INTO daily_rollups (
+            network, date, avg_close_time_seconds, close_time_sample_count,
+            avg_congestion_usage, max_congestion_usage, total_operations,
+            total_successful_tx, total_failed_tx, avg_fee_p50, avg_fee_p90
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          network,
+          date,
+          row.avg_close_time_seconds,
+          row.close_time_sample_count,
+          row.avg_congestion_usage,
+          row.max_congestion_usage,
+          row.total_operations,
+          row.total_successful_tx,
+          row.total_failed_tx,
+          row.avg_fee_p50,
+          row.avg_fee_p90,
+        );
+    };
+
+    /** The YYYY-MM-DD label `daysAgo` before today. */
+    const dateOf = (daysAgo: number): string =>
+      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS).toISOString().slice(0, 10);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("returns points oldest-first", () => {
+      seedRollup("mainnet", dateOf(3));
+      seedRollup("mainnet", dateOf(1));
+      seedRollup("mainnet", dateOf(2));
+
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points.map((p) => p.date)).toEqual([
+        dateOf(3),
+        dateOf(2),
+        dateOf(1),
+      ]);
+    });
+
+    it("maps every column onto the response shape", () => {
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: 5.6789,
+        avg_congestion_usage: 0.4213456,
+        max_congestion_usage: 0.987123,
+        total_operations: 3427194,
+        total_successful_tx: 1044821,
+        total_failed_tx: 20713,
+        avg_fee_p50: 137.6,
+        avg_fee_p90: 9042.4,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point).toEqual({
+        date: dateOf(1),
+        closeTimeSeconds: 5.68, // 2dp, matching getHistory
+        congestionUsage: 0.4213, // 4dp
+        maxCongestionUsage: 0.9871, // 4dp
+        operations: 3427194,
+        successfulTransactions: 1044821,
+        failedTransactions: 20713,
+        p50Fee: 138, // whole
+        p90Fee: 9042,
+      });
+    });
+
+    it("keeps successful and failed transactions separate rather than summing", () => {
+      seedRollup("mainnet", dateOf(1), {
+        total_successful_tx: 100,
+        total_failed_tx: 7,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.successfulTransactions).toBe(100);
+      expect(point.failedTransactions).toBe(7);
+      expect(point).not.toHaveProperty("transactions");
+    });
+
+    it("preserves a genuine zero instead of reporting it as null", () => {
+      /*
+       * getHistory's truthiness idiom would turn each of these into null. A
+       * day of zero congestion is a reading, not missing data.
+       */
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: 0,
+        avg_congestion_usage: 0,
+        max_congestion_usage: 0,
+        avg_fee_p50: 0,
+        avg_fee_p90: 0,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.closeTimeSeconds).toBe(0);
+      expect(point.congestionUsage).toBe(0);
+      expect(point.maxCongestionUsage).toBe(0);
+      expect(point.p50Fee).toBe(0);
+      expect(point.p90Fee).toBe(0);
+    });
+
+    it("passes nulls through as null", () => {
+      seedRollup("mainnet", dateOf(1), {
+        avg_close_time_seconds: null,
+        avg_congestion_usage: null,
+        max_congestion_usage: null,
+        avg_fee_p50: null,
+        avg_fee_p90: null,
+      });
+
+      const [point] = db.getTrends("mainnet", 90).points;
+
+      expect(point.closeTimeSeconds).toBeNull();
+      expect(point.congestionUsage).toBeNull();
+      expect(point.maxCongestionUsage).toBeNull();
+      expect(point.p50Fee).toBeNull();
+      expect(point.p90Fee).toBeNull();
+    });
+
+    it("does not zero-fill missing dates", () => {
+      // An outage must read as a gap, not as a day of zero traffic.
+      seedRollup("mainnet", dateOf(5));
+      seedRollup("mainnet", dateOf(1));
+
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points).toHaveLength(2);
+      expect(trends.points.map((p) => p.date)).toEqual([dateOf(5), dateOf(1)]);
+    });
+
+    it("filters at the range boundary", () => {
+      // A 30d window spans today plus the 29 days before it.
+      seedRollup("mainnet", dateOf(29)); // included
+      seedRollup("mainnet", dateOf(30)); // excluded
+      seedRollup("mainnet", dateOf(0)); // today, included if present
+
+      const trends = db.getTrends("mainnet", 30);
+
+      expect(trends.points.map((p) => p.date)).toEqual([dateOf(29), dateOf(0)]);
+    });
+
+    it("returns the same window whatever time of day the request arrives", () => {
+      /*
+       * A property worth pinning even though the current implementation gets
+       * it for free: the comparison is on date strings and subtracting whole
+       * days preserves the time of day, so the boundary cannot drift. This
+       * test exists so that a future change to instant-based filtering fails
+       * here rather than silently making the oldest day flicker in and out of
+       * the window as the day passes.
+       */
+      seedRollup("mainnet", dateOf(29));
+      seedRollup("mainnet", dateOf(30));
+
+      const at = (hour: number, minute: number): string[] => {
+        vi.setSystemTime(Date.UTC(2026, 8, 11, hour, minute, 0));
+        return db.getTrends("mainnet", 30).points.map((p) => p.date);
+      };
+
+      expect(at(0, 0)).toEqual([dateOf(29)]);
+      expect(at(12, 30)).toEqual([dateOf(29)]);
+      expect(at(23, 59)).toEqual([dateOf(29)]);
+    });
+
+    it("isolates networks", () => {
+      seedRollup("mainnet", dateOf(1), { total_operations: 10 });
+      seedRollup("testnet", dateOf(1), { total_operations: 99 });
+
+      expect(db.getTrends("mainnet", 90).points[0].operations).toBe(10);
+      expect(db.getTrends("testnet", 90).points[0].operations).toBe(99);
+    });
+
+    it("echoes the canonical range label", () => {
+      expect(db.getTrends("mainnet", 30).range).toBe("30d");
+      expect(db.getTrends("mainnet", 90).range).toBe("90d");
+      // 1y, not 365d — the label is part of the contract, not the day count.
+      expect(db.getTrends("mainnet", 365).range).toBe("1y");
+    });
+
+    it("returns an empty points array when nothing has been rolled up", () => {
+      const trends = db.getTrends("mainnet", 90);
+
+      expect(trends.points).toEqual([]);
+      expect(trends.network).toBe("mainnet");
+      expect(trends.range).toBe("90d");
+    });
+
+    it("defaults to mainnet and 90 days", () => {
+      seedRollup("mainnet", dateOf(1));
+      seedRollup("testnet", dateOf(1));
+
+      const trends = db.getTrends();
+
+      expect(trends.network).toBe("mainnet");
+      expect(trends.range).toBe("90d");
+      expect(trends.points).toHaveLength(1);
+    });
+  });
+
   describe("schema migration", () => {
     it("adds close_time_sample_count to a daily_rollups table that predates it", () => {
       /*

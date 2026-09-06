@@ -45,6 +45,7 @@ const ROUTES = [
   "/api/ledgers/recent",
   "/api/fees/recent",
   "/api/history",
+  "/api/trends",
   "/api/soroban",
   "/api/operations/breakdown",
 ] as const;

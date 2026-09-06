@@ -53,6 +53,37 @@ export interface HistoryResponse {
   points: HistoryPoint[];
 }
 
+export interface TrendPoint {
+  /** YYYY-MM-DD, UTC. */
+  date: string;
+  closeTimeSeconds: number | null;
+  congestionUsage: number | null;
+  maxCongestionUsage: number | null;
+  operations: number;
+  successfulTransactions: number;
+  failedTransactions: number;
+  p50Fee: number | null;
+  p90Fee: number | null;
+}
+
+export interface TrendsResponse {
+  network: string;
+  /** 30d | 90d | 1y */
+  range: string;
+  points: TrendPoint[];
+}
+
+/**
+ * Day counts to their canonical response labels. `1y` is 365 days but must
+ * echo back as `1y`, not `365d` — the label is part of the contract the
+ * frontend's range selector round-trips through the URL.
+ */
+const TREND_RANGE_LABELS: Record<number, string> = {
+  30: "30d",
+  90: "90d",
+  365: "1y",
+};
+
 export class NetPulseDatabase {
   private db: Database.Database;
 
@@ -437,6 +468,90 @@ export class NetPulseDatabase {
     };
   }
 
+  /**
+   * Daily-grain history from `daily_rollups`, oldest-first.
+   *
+   * Mirrors `getHistory`, with two deliberate differences beyond the grain:
+   * `date` rather than `timestamp`, and successful/failed transactions kept
+   * separate rather than summed — the table stores them separately and the
+   * split is more useful at daily grain.
+   *
+   * Missing dates are **not** zero-filled, matching `getHistory`. A day the
+   * backend was down has no row, and reads as a gap in the chart rather than
+   * as a day on which the network carried no traffic.
+   */
+  getTrends(network: string = "mainnet", durationDays: number = 90): TrendsResponse {
+    /*
+     * The window is a whole number of UTC days back from today's date, so a
+     * `30d` request spans today plus the 29 days before it and the boundary
+     * does not move as the day passes.
+     *
+     * The floor states that intent rather than securing it: the comparison is
+     * on `YYYY-MM-DD` strings, and subtracting whole days preserves the time
+     * of day, so an unfloored `Date.now()` would yield the same date string.
+     * It is kept because the alternative reads as "29 days and some hours ago"
+     * and would quietly start mattering if this ever compared instants.
+     */
+    const sinceUnix = floorToUtcMidnight(Date.now()) - (durationDays - 1) * DAY_MS;
+    const sinceDate = new Date(sinceUnix).toISOString().slice(0, 10);
+
+    const rows = this.db
+      .prepare(
+        `
+      SELECT
+        date,
+        avg_close_time_seconds,
+        avg_congestion_usage,
+        max_congestion_usage,
+        total_operations,
+        total_successful_tx,
+        total_failed_tx,
+        avg_fee_p50,
+        avg_fee_p90
+      FROM daily_rollups
+      WHERE network = ? AND date >= ?
+      ORDER BY date ASC
+    `,
+      )
+      .all(network, sinceDate) as Array<{
+      date: string;
+      avg_close_time_seconds: number | null;
+      avg_congestion_usage: number | null;
+      max_congestion_usage: number | null;
+      total_operations: number;
+      total_successful_tx: number;
+      total_failed_tx: number;
+      avg_fee_p50: number | null;
+      avg_fee_p90: number | null;
+    }>;
+
+    /*
+     * `!= null` rather than getHistory's truthiness check. That idiom coerces
+     * a genuine zero to null — a real reading of "no congestion" or "no fee"
+     * would be reported as missing data.
+     */
+    const round = (value: number | null, digits: number): number | null =>
+      value != null ? Number(value.toFixed(digits)) : null;
+
+    const points: TrendPoint[] = rows.map((row) => ({
+      date: row.date,
+      closeTimeSeconds: round(row.avg_close_time_seconds, 2),
+      congestionUsage: round(row.avg_congestion_usage, 4),
+      maxCongestionUsage: round(row.max_congestion_usage, 4),
+      operations: row.total_operations,
+      successfulTransactions: row.total_successful_tx,
+      failedTransactions: row.total_failed_tx,
+      p50Fee: row.avg_fee_p50 != null ? Math.round(row.avg_fee_p50) : null,
+      p90Fee: row.avg_fee_p90 != null ? Math.round(row.avg_fee_p90) : null,
+    }));
+
+    return {
+      network,
+      range: TREND_RANGE_LABELS[durationDays] ?? `${durationDays}d`,
+      points,
+    };
+  }
+
   close(): void {
     this.db.close();
   }
@@ -466,6 +581,8 @@ export const db = {
     getDb().rollupAndPrune(...args),
   getHistory: (...args: Parameters<NetPulseDatabase["getHistory"]>) =>
     getDb().getHistory(...args),
+  getTrends: (...args: Parameters<NetPulseDatabase["getTrends"]>) =>
+    getDb().getTrends(...args),
   close: () => {
     _dbInstance?.close();
     _dbInstance = null;
