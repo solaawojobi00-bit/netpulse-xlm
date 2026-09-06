@@ -155,7 +155,13 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
   });
 
   describe("Cursor derivation and resume", () => {
-    it("derives initial cursor from newest warm-up ledger sequence", async () => {
+    /*
+     * Horizon's /ledgers?cursor= takes a paging token. Seeding a raw ledger
+     * sequence there is what made a freshly started backend stream ledgers
+     * from fourteen months earlier (#84), so the initial cursor is "now"
+     * whether or not the warm-up produced ledgers.
+     */
+    it("seeds the initial cursor with 'now', never a ledger sequence", async () => {
       mockFetchRecentLedgers.mockResolvedValue([mockLedger(100), mockLedger(105)]);
 
       mockConnectHorizonLedgerStream.mockImplementation(async () => {
@@ -166,13 +172,13 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
       expect(mockConnectHorizonLedgerStream).toHaveBeenCalledWith(
         expect.any(String),
-        "105",
+        "now",
         expect.any(Function),
         controller.signal,
       );
     });
 
-    it("falls back to 'now' when warm-up produces no ledgers", async () => {
+    it("seeds 'now' when the warm-up produces no ledgers either", async () => {
       mockFetchRecentLedgers.mockResolvedValue([]);
 
       mockConnectHorizonLedgerStream.mockImplementation(async () => {
@@ -189,7 +195,7 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
       );
     });
 
-    it("resumes from paging_token or sequence of last-seen ledger after reconnect", async () => {
+    it("resumes from the last paging_token, and holds it when a record has none", async () => {
       const cursorsPassed: string[] = [];
 
       mockFetchRecentLedgers.mockResolvedValue([mockLedger(200)]);
@@ -213,7 +219,10 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
           });
           throw new Error("Disconnect 1");
         } else if (iteration === 2) {
-          // Second stream receives record without paging_token (fallback to sequence)
+          // Second stream receives a record with no paging_token. The cursor
+          // must stay on the last good token rather than fall back to a
+          // sequence, which is the same wrong kind of identifier as the old
+          // seed (#84).
           onLedger({
             sequence: 202,
             closed_at: "2026-09-02T12:00:10Z",
@@ -239,7 +248,113 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
       await streamPromise;
 
-      expect(cursorsPassed).toEqual(["200", "token-201", "202"]);
+      expect(cursorsPassed).toEqual(["now", "token-201", "token-201"]);
+    });
+  });
+
+  describe("Close time derivation in the stream", () => {
+    /**
+     * Drives one streamed record against a warm-up window and returns the
+     * stored sample for it.
+     */
+    const streamOneRecord = async (
+      warmUp: LedgerSample[],
+      record: HorizonLedgerRecord,
+    ): Promise<LedgerSample | undefined> => {
+      mockFetchRecentLedgers.mockResolvedValue(warmUp);
+
+      mockConnectHorizonLedgerStream.mockImplementation(
+        async (_url: string, _cursor: string, onLedger: (r: HorizonLedgerRecord) => void) => {
+          onLedger(record);
+          controller.abort();
+        },
+      );
+
+      await startStreamForNetwork("mainnet", controller.signal);
+
+      return stores.mainnet.getLedgers().find((l) => l.sequence === record.sequence);
+    };
+
+    const streamedRecord = (
+      sequence: number,
+      closedAt: string,
+    ): HorizonLedgerRecord => ({
+      sequence,
+      paging_token: String(sequence),
+      closed_at: closedAt,
+      successful_transaction_count: 5,
+      failed_transaction_count: 0,
+      operation_count: 10,
+      tx_set_operation_count: 10,
+      base_fee_in_stroops: 100,
+      max_tx_set_size: 1000,
+    });
+
+    it("measures against the ledger that precedes it by sequence", async () => {
+      const sample = await streamOneRecord(
+        [
+          mockLedger(100, "2026-09-04T11:17:00Z"),
+          mockLedger(101, "2026-09-04T11:17:06Z"),
+        ],
+        streamedRecord(102, "2026-09-04T11:17:11Z"),
+      );
+
+      expect(sample?.closeTimeSeconds).toBe(5);
+    });
+
+    it("ignores a newer ledger that is not the predecessor", async () => {
+      /*
+       * The store's newest ledger is 200, but the arriving record is 102. The
+       * old code measured against `.at(-1)` — ledger 200 — and produced a
+       * delta against the wrong neighbour. The predecessor here is 101.
+       */
+      const sample = await streamOneRecord(
+        [
+          mockLedger(101, "2026-09-04T11:17:06Z"),
+          mockLedger(200, "2026-09-04T11:27:00Z"),
+        ],
+        streamedRecord(102, "2026-09-04T11:17:11Z"),
+      );
+
+      expect(sample?.closeTimeSeconds).toBe(5);
+    });
+
+    it("reports null, not a large negative, for a stale record with no predecessor in the window", async () => {
+      /*
+       * The exact shape from #84: the stream delivered ledgers from July 2025
+       * while the window held September 2026 ones. Measured against the
+       * newest stored ledger, this record's close time came out around
+       * -36,000,000 seconds.
+       */
+      const sample = await streamOneRecord(
+        [
+          mockLedger(64268926, "2026-09-04T11:17:14Z"),
+          mockLedger(64268927, "2026-09-04T11:17:20Z"),
+        ],
+        streamedRecord(57968839, "2025-07-12T13:43:53Z"),
+      );
+
+      expect(sample?.closeTimeSeconds).toBeNull();
+    });
+
+    it("reports null when the window is empty", async () => {
+      const sample = await streamOneRecord(
+        [],
+        streamedRecord(102, "2026-09-04T11:17:11Z"),
+      );
+
+      expect(sample?.closeTimeSeconds).toBeNull();
+    });
+
+    it("reports null across a sequence gap rather than measuring over it", async () => {
+      // 105 does not follow 101. The elapsed time spans four unseen ledgers,
+      // so it is not this ledger's close time and is not reported as one.
+      const sample = await streamOneRecord(
+        [mockLedger(101, "2026-09-04T11:17:06Z")],
+        streamedRecord(105, "2026-09-04T11:17:36Z"),
+      );
+
+      expect(sample?.closeTimeSeconds).toBeNull();
     });
   });
 

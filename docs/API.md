@@ -149,7 +149,7 @@ the dashboard's primary polling endpoint and the richest single response.
 | `secondsSinceLastUpdate` | `number \| null` | Fractional seconds since `lastUpdated`. `null` under the same condition. |
 | `horizonUrl` | `string` | The Horizon base URL this network is configured to poll. Echoes `HORIZON_URL` / `HORIZON_TESTNET_URL` verbatim, so it will show a misconfigured value too. Typed optional, but always present in practice. |
 | `ledgerCloseTime.currentSeconds` | `number \| null` | Close time of the newest ledger in the window. |
-| `ledgerCloseTime.averageSeconds` | `number \| null` | Mean close time across the window. **Currently unreliable — see [Known data-quality issues](#known-data-quality-issues).** |
+| `ledgerCloseTime.averageSeconds` | `number \| null` | Mean close time across the window, over usable samples only — anything not finite and positive is excluded rather than averaged. `null` when the window holds no usable sample. |
 | `fees.baseFeeStroops` | `number \| null` | Base fee of the last ledger, in stroops, from the newest fee snapshot. |
 | `fees.p10` `p50` `p90` `p99` | `number \| null` | Fee-charged percentiles, in stroops, from the newest fee snapshot. |
 | `congestion.ledgerCapacityUsage` | `number \| null` | Ledger capacity usage, 0-1, from the newest fee snapshot. |
@@ -259,7 +259,7 @@ The in-memory rolling window of recent ledgers, oldest first.
 | --- | --- | --- |
 | `sequence` | `number` | Stellar ledger sequence number. Ascending across the array. |
 | `closedAt` | `string` | Horizon's `closed_at`, ISO 8601. Second precision, no milliseconds. |
-| `closeTimeSeconds` | `number \| null` | Seconds between this ledger and the preceding one. `null` for the oldest ledger in the window, which has no predecessor to measure against. **May currently be negative — see [Known data-quality issues](#known-data-quality-issues).** |
+| `closeTimeSeconds` | `number \| null` | Seconds between this ledger and the one immediately preceding it by sequence. Always positive when present. `null` when it cannot be measured — the oldest ledger in the window, or a record whose predecessor is not in the window. |
 | `successfulTransactionCount` | `number` | Transactions that succeeded. |
 | `failedTransactionCount` | `number` | Transactions included but failed. |
 | `operationCount` | `number` | Operations in successful transactions. |
@@ -674,8 +674,10 @@ well as frequent. **Debounce or throttle rendering on the client and treat each
 frame as a complete replacement for prior state, not a delta.**
 
 Note that the measurement above was taken while the ledger stream was
-misbehaving (see [Known data-quality issues](#known-data-quality-issues)), so
-treat it as evidence that bursts are possible rather than as a normal-operation
+misbehaving — it was replaying months-old ledgers because of the cursor defect
+since fixed in
+[#84](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/84) — so treat
+it as evidence that bursts are possible rather than as a normal-operation
 figure.
 
 ### Keepalive and close
@@ -726,18 +728,6 @@ Empty collections are always `[]`, never `null` and never absent.
 
 Open defects that affect what these endpoints return. Documented rather than
 smoothed over, so consumers are not surprised.
-
-**Negative `closeTimeSeconds` and a meaningless `averageSeconds`
-([#84](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/84)).**
-`ledgerCloseTime.averageSeconds` can be wildly wrong — an observed value was
-`-22174961.51`, while `currentSeconds` was a correct `6`. The rolling window
-can hold ledgers from widely separated times, and a stale ledger's
-`closeTimeSeconds` is measured against the newest ledger in the store rather
-than its actual predecessor, producing large negative values that dominate the
-mean. Until this is fixed:
-
-- Do not display `averageSeconds` without sanity-checking it.
-- Filter `closeTimeSeconds <= 0` out of any chart or aggregate.
 
 **Zero aggregates are reported as `null` in `/api/history`.** The truthiness
 check described [above](#reading-the-points-array-correctly) means a genuine

@@ -37,7 +37,9 @@ As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horiz
 
 - **Single Backend Ingestion Stream:** The backend maintains a single long-lived Server-Sent Events (`Accept: text/event-stream`) connection to Horizon's `/ledgers` endpoint.
   - Reconnect-with-exponential-backoff is handled automatically on disconnections, advancing a cursor as records arrive so the stream resumes roughly where it left off.
-  - **The cursor handling is currently buggy — see [#84](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/84).** The loop advances the cursor from each record's `paging_token`, but the *initial* cursor is seeded with a raw ledger `sequence`, which is not the same kind of identifier. In practice a freshly started backend has been observed ingesting ledgers from months earlier alongside current ones. So resumption is not currently gap-free or duplicate-free, and this section should not be read as a guarantee that it is. Ledger rows are keyed on `(network, sequence)` with `INSERT OR REPLACE`, so redelivery is at least idempotent in SQLite.
+  - **Only paging tokens are ever used as cursors** ([#84](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/84)). The initial cursor is `"now"`, and the loop advances it from each record's `paging_token`. Seeding a raw ledger `sequence` — a different kind of identifier, which Horizon reinterprets — is what caused a freshly started backend to ingest ledgers from months earlier alongside current ones. A record arriving without a token leaves the cursor on the last good one rather than falling back to a sequence.
+  - Resumption is still not guaranteed gap-free. A fresh start streams from `"now"`, so ledgers closing between the warm-up fetch and the stream opening are not delivered — a few seconds at process start. Ledger rows are keyed on `(network, sequence)` with `INSERT OR REPLACE`, so redelivery after a reconnect is idempotent in SQLite.
+  - Close time is measured against the ledger that precedes a record **by sequence**, not the newest ledger in the store. With no such predecessor in the window the close time is reported as `null` rather than as a delta against an unrelated ledger — which is what produced close times of around -36,000,000 seconds.
   - Because Horizon does not offer SSE streaming on `/fee_stats`, the backend continues to poll `/fee_stats` on a configurable interval.
 - **WebSocket Broadcast Fan-out:** Instead of multiple browser tabs opening individual SSE connections to public Horizon, the backend terminates the Horizon stream and broadcasts updates over a single WebSocket channel (`/ws`) to all connected frontend clients.
 - **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` is fetched separately on its own interval in both modes.
@@ -108,8 +110,9 @@ Backend ingestion (persistent SSE stream + ~6s interval for the polled endpoints
         │  - appends to a capped in-memory rolling window, per network
         │  - writes ledgers + fee snapshots to SQLite (7-day retention)
         │  - reconnects with exponential backoff (1s → 30s cap), resuming
-        │    from its cursor — see the SSE section above and issue #84;
-        │    resumption is not currently gap-free
+        │    from its last paging token — see the SSE section above;
+        │    a fresh start streams from "now", so resumption is not
+        │    gap-free at process start
         │  - tracks last-successful-update timestamp for staleness detection
         │  - notifies subscribers on every store update
         ├──────────────────────────────┐

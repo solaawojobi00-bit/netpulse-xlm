@@ -1,3 +1,4 @@
+import { isValidCloseTimeSeconds } from "./closeTime.js";
 import { HORIZON_URLS, type Network } from "./horizon.js";
 import { stores } from "./poller.js";
 import type { HealthResponse } from "./types.js";
@@ -33,9 +34,18 @@ export function buildHealthResponse(network: Network = "mainnet"): HealthRespons
   const lastSuccessAt = currentStore.getLastSuccessAt();
   const alertThreshold = getCongestionAlertThreshold();
 
+  /*
+   * Filtered by validity, not merely by non-null. The ingestion fixes in #84
+   * stop negative close times being produced, but this is the layer that
+   * reports the average, and one bad sample dominating it is exactly the
+   * symptom that surfaced the bug — a window holding 30 stale ledgers reported
+   * an average of about -8.4 months. Rows already persisted before that fix,
+   * or any future path that computes a delta wrongly, must not be able to
+   * poison this number either.
+   */
   const closeTimes = ledgers
     .map((l) => l.closeTimeSeconds)
-    .filter((v): v is number => v !== null);
+    .filter(isValidCloseTimeSeconds);
   const currentCloseTime = closeTimes.at(-1) ?? null;
   const averageCloseTime = average(closeTimes);
 
