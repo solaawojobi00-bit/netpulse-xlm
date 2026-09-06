@@ -1,0 +1,27 @@
+# Gitleaks configuration for netpulse-xlm.
+#
+# The upstream default ruleset is the baseline and is not weakened here. Every
+# provider rule -- AWS, GitHub, Slack, npm, private-key blocks, and the rest --
+# applies exactly as shipped.
+#
+# There are no allowlist entries, and that is a finding rather than an omission.
+# This repository reads public Horizon endpoints and stores aggregate network
+# metrics; it holds no keypairs, and the Stellar values it does handle are
+# ledger sequences, fee figures, and operation counts. A scan of the full commit
+# history with the default rules reports nothing.
+#
+# Worth recording for whoever bumps this next: a Stellar account ID (G + 55
+# base32 characters) is a *public* address, and in repositories whose fixtures
+# assign one to a field named something like SIGNING_KEY, the default
+# generic-api-key heuristic reports it as a credential. This tree contains no
+# such addresses and no such assignments, so no exception is needed. If fixtures
+# like that arrive later, allowlist on the *value's shape*
+# (regexTarget = "secret", '''^G[A-Z2-7]{55}$''') rather than on a path: a path
+# allowlist skips the file before any rule runs and would blanket-silence a real
+# credential that landed there, whereas matching the value leaves every other
+# rule live. A Stellar secret seed starts with S and must never be allowlisted.
+
+title = "netpulse-xlm secret scanning"
+
+[extend]
+useDefault = true
