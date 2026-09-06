@@ -85,7 +85,12 @@ stays legible alongside what actually shipped.
   *Partly shipped since v1 (#15):* history is persisted to SQLite with
   a retention window of 7-8 whole UTC days (#90) and surfaced as a 24h
   trend view in 5-minute buckets.
-  Longer-range daily/weekly aggregates remain out of scope.
+  *Extended since (#87, #88):* each UTC day is rolled up into a daily
+  aggregate before its raw rows are pruned, and those daily rows are kept
+  indefinitely and served over `/api/trends` at 30d/90d/1y ranges — so
+  **daily** aggregates have shipped.
+  **Weekly and monthly aggregates remain out of scope**, along with any
+  backfill of days this backend did not observe.
 - **Per-account or per-transaction lookup/search** — this is not a block
   explorer. No address search, no transaction detail pages.
   *Still out of scope.*
