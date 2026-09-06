@@ -5,7 +5,14 @@ import type { ChartStatus } from "./resolveStatus";
  * The status vocabulary and its precedence now live in ./resolveStatus, which
  * the stat tiles share. Re-exported here so the seven chart call sites keep
  * importing the pair together.
+ *
+ * react-refresh/only-export-components flags this: a module that exports both
+ * a component and plain functions drops out of Fast Refresh and full-reloads
+ * on edit. That is the accepted cost of the re-export above -- the alternative
+ * is repointing eight call sites at ./resolveStatus purely to satisfy a
+ * dev-server optimisation, which is churn, not an improvement.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export { resolveChartStatus, resolveValueStatus } from "./resolveStatus";
 export type { ChartStatus } from "./resolveStatus";
 

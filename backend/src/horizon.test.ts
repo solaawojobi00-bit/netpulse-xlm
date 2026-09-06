@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   connectHorizonLedgerStream,
   fetchFeeStats,
   fetchRecentLedgers,
-  fetchRecentOperations,
   HorizonFeeStatsResponseSchema,
   HorizonLedgerRecordSchema,
-  HorizonLedgersResponseSchema,
   HorizonOperationRecordSchema,
   numericCoerce,
   recordToSample,
@@ -97,7 +95,7 @@ describe("Horizon Unit Tests", () => {
         json: async () => ({
           _embedded: { records: mockRecords },
         }),
-      } as Response);
+      });
 
       const samples = await fetchRecentLedgers(3, "https://horizon-test.example.com");
 
@@ -133,7 +131,7 @@ describe("Horizon Unit Tests", () => {
             p99: "1000",
           },
         }),
-      } as Response);
+      });
 
       const feeStats = await fetchFeeStats("https://horizon-test.example.com");
 
@@ -159,7 +157,7 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
-      } as Response);
+      });
 
       await expect(
         fetchRecentLedgers(5, "https://horizon-test.example.com"),
@@ -196,7 +194,7 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([ssePayload]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
       await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
@@ -214,7 +212,7 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([chunk1, chunk2]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
       await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
@@ -234,7 +232,7 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream(streamData),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
       await expect(
@@ -260,7 +258,7 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([ssePayload]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
       await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
@@ -273,7 +271,7 @@ describe("Horizon Unit Tests", () => {
         ok: false,
         status: 502,
         body: null,
-      } as Response);
+      });
 
       await expect(
         connectHorizonLedgerStream("https://horizon-test.example.com", "now", vi.fn()),
@@ -374,7 +372,7 @@ describe("Horizon Unit Tests", () => {
               p99: "500",
             },
           }),
-        } as Response);
+        });
 
         await expect(fetchFeeStats("https://horizon.test")).rejects.toThrow(
           /Horizon schema validation failed for \/fee_stats: fee_charged\.p50/,
@@ -394,7 +392,7 @@ describe("Horizon Unit Tests", () => {
               ],
             },
           }),
-        } as Response);
+        });
 
         await expect(fetchRecentLedgers(5, "https://horizon.test")).rejects.toThrow(
           /Horizon schema validation failed for \/ledgers\?order=desc&limit=5/,

@@ -305,7 +305,9 @@ describe("delivery", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://example.test/hook");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body)).network).toBe("mainnet");
+    // `BodyInit` covers streams and typed arrays, which do not stringify
+    // usefully; this call site always sends a JSON string.
+    expect(JSON.parse(init?.body as string).network).toBe("mainnet");
   });
 
   it("reports a rejection without throwing", async () => {

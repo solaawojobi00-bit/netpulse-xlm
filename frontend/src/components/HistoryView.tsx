@@ -172,7 +172,7 @@ export function HistoryView({
               />
               <Tooltip
                 {...tooltipProps}
-                formatter={(v: any) => [`${v}%`, "Avg congestion"]}
+                formatter={(v) => [`${String(v)}%`, "Avg congestion"]}
               />
               <Line
                 type="monotone"

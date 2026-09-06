@@ -3,7 +3,7 @@ import type { AddressInfo } from "net";
 import { WebSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import { isOriginAllowed, parseAllowedOrigins } from "./origins.js";
-import { setupWebSocketServer } from "./ws.js";
+import { decodeRawData, setupWebSocketServer } from "./ws.js";
 
 describe("parseAllowedOrigins", () => {
   it("falls back to the Vite dev server so local development needs no config", () => {
@@ -43,6 +43,52 @@ describe("isOriginAllowed", () => {
 
   it("allows every origin when configured with *", () => {
     expect(isOriginAllowed("https://evil.example", ["*"])).toBe(true);
+  });
+});
+
+/*
+ * `ws` hands a frame to the message handler as one of three shapes depending
+ * on how it arrived. Only a Buffer has a `toString()` worth calling: the
+ * previous `data.toString()` turned an ArrayBuffer into the literal
+ * "[object ArrayBuffer]" and a fragmented Buffer[] into its elements
+ * comma-joined. Both then failed JSON.parse and were swallowed by the
+ * handler's catch as "malformed", so a client's setNetwork silently did
+ * nothing and the dashboard kept streaming the previous network.
+ */
+describe("decodeRawData", () => {
+  const message = JSON.stringify({ type: "setNetwork", network: "testnet" });
+
+  it("decodes a Buffer frame", () => {
+    expect(decodeRawData(Buffer.from(message, "utf8"))).toBe(message);
+  });
+
+  it("decodes an ArrayBuffer frame", () => {
+    const bytes = new TextEncoder().encode(message);
+    // Slice to a standalone ArrayBuffer so the view's offset cannot mask a
+    // decode that ignores byteOffset/byteLength.
+    const arrayBuffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
+
+    expect(decodeRawData(arrayBuffer)).toBe(message);
+  });
+
+  it("decodes a fragmented Buffer[] frame by concatenating, not comma-joining", () => {
+    const split = 10;
+    const fragments = [
+      Buffer.from(message.slice(0, split), "utf8"),
+      Buffer.from(message.slice(split), "utf8"),
+    ];
+
+    const decoded = decodeRawData(fragments);
+    expect(decoded).toBe(message);
+    expect(decoded).not.toContain(",{");
+  });
+
+  it("decodes multi-byte UTF-8 without mangling it", () => {
+    const unicode = JSON.stringify({ type: "subscribe", note: "café ✓" });
+    expect(decodeRawData(Buffer.from(unicode, "utf8"))).toBe(unicode);
   });
 });
 

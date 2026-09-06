@@ -291,7 +291,6 @@ export async function pollOperations(network: Network): Promise<void> {
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     logger.warn("Operations poll failed", { component: "poller", network, err });
   }
 }

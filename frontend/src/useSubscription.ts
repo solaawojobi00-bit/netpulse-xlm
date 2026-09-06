@@ -15,6 +15,27 @@ import {
 
 const POLL_FALLBACK_MS = 5000;
 
+/*
+ * The shape the server sends on /ws. Declaring it is what lets the handler
+ * below read fields without every access being an unchecked `any` hop into
+ * typed React state.
+ *
+ * This is a shape declaration, not runtime validation -- the payload is still
+ * whatever the socket delivered. Every field is therefore optional and the
+ * handler treats a missing one as "no update", so a truncated or partial frame
+ * leaves the previous value in place rather than writing `undefined` into
+ * state typed as `T | null`.
+ */
+interface SnapshotMessage {
+  type?: string;
+  network?: string;
+  health?: HealthResponse;
+  ledgers?: LedgerSample[];
+  fees?: FeeSnapshot[];
+  operationBreakdown?: OperationBreakdownResponse;
+  soroban?: SorobanMetricsResponse;
+}
+
 export interface SubscriptionData {
   health: HealthResponse | null;
   ledgers: LedgerSample[] | null;
@@ -35,8 +56,17 @@ export function useSubscription(network: Network): SubscriptionData {
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
+  /*
+   * Read from the socket handler and the poll loop, both of which fire long
+   * after the render that scheduled them and must see the network the user is
+   * currently on. Synced in an effect rather than written during render, for
+   * the same reason as usePolling: a ref mutated mid-render can be written for
+   * a render React later throws away.
+   */
   const networkRef = useRef(network);
-  networkRef.current = network;
+  useEffect(() => {
+    networkRef.current = network;
+  });
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -93,11 +123,20 @@ export function useSubscription(network: Network): SubscriptionData {
       ws.onmessage = (event) => {
         if (cancelled) return;
         try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "snapshot" && payload.network === networkRef.current) {
-            setHealth(payload.health);
-            setLedgers(payload.ledgers);
-            setFeeSnapshots(payload.fees);
+          const payload = JSON.parse(
+            event.data as string,
+          ) as SnapshotMessage;
+          if (
+            payload.type === "snapshot" &&
+            payload.network === networkRef.current
+          ) {
+            // Guarded individually: these three used to be assigned straight
+            // through, so a frame missing one would write `undefined` into
+            // state declared as `T | null` and every consumer's `=== null`
+            // check would miss it.
+            if (payload.health) setHealth(payload.health);
+            if (payload.ledgers) setLedgers(payload.ledgers);
+            if (payload.fees) setFeeSnapshots(payload.fees);
             if (payload.operationBreakdown) {
               setOperationBreakdown(payload.operationBreakdown);
             }

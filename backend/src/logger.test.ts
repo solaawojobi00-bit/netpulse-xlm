@@ -68,4 +68,45 @@ describe("Logger", () => {
     expect(output).toContain("Database disk full");
     expect(output).toContain(testErr.stack!);
   });
+
+  /*
+   * Not everything that reaches `err` is an Error. A `fetch` layer or a driver
+   * can reject with a plain object, and the previous `String(err)` turned all
+   * of them into the literal "[object Object]" -- the log line survived, the
+   * diagnostic in it did not.
+   */
+  it("serialises a non-Error object rejection instead of stringifying it to [object Object]", () => {
+    process.env.LOG_LEVEL = "error";
+    logger.error("Horizon rejected", {
+      component: "poller",
+      err: { status: 503, detail: "upstream unavailable" },
+    });
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const output = errorSpy.mock.calls[0][0];
+    expect(output).not.toContain("[object Object]");
+    expect(output).toContain("503");
+    expect(output).toContain("upstream unavailable");
+  });
+
+  it("falls back to a type tag when the error value cannot be serialised", () => {
+    process.env.LOG_LEVEL = "error";
+    // Circular references make JSON.stringify throw. The logger must not
+    // throw with it -- a failing log call would take down the caller that was
+    // only trying to report a problem.
+    const circular: Record<string, unknown> = { name: "loop" };
+    circular.self = circular;
+
+    expect(() =>
+      logger.error("Poll failed", { component: "poller", err: circular }),
+    ).not.toThrow();
+    expect(errorSpy.mock.calls[0][0]).toContain("[object Object]");
+  });
+
+  it("keeps primitive error values readable", () => {
+    process.env.LOG_LEVEL = "error";
+    logger.error("String rejection", { component: "ws", err: "socket hang up" });
+
+    expect(errorSpy.mock.calls[0][0]).toContain("socket hang up");
+  });
 });

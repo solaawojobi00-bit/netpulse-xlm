@@ -214,7 +214,10 @@ export async function connectHorizonLedgerStream(
     throw new Error(`Horizon SSE stream failed: ${url} -> ${res.status}`);
   }
 
-  const reader = res.body.getReader();
+  // Annotated rather than inferred: `res.body` widens to a stream of `any`
+  // under this tsconfig's lib set, which silently makes `value` below `any`
+  // too and hands an untyped buffer straight to the decoder.
+  const reader: ReadableStreamDefaultReader<Uint8Array> = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
 
@@ -233,7 +236,9 @@ export async function connectHorizonLedgerStream(
           const raw = line.slice(6).trim();
           if (raw && raw !== '"hello"') {
             try {
-              const json = JSON.parse(raw);
+              // `JSON.parse` returns `any`; naming it `unknown` keeps the
+              // schema below as the only thing that decides its shape.
+              const json: unknown = JSON.parse(raw);
               const parsed = HorizonLedgerRecordSchema.safeParse(json);
               if (parsed.success) {
                 onLedger(parsed.data);

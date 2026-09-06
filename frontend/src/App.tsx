@@ -14,10 +14,7 @@ import { SyncStatus } from "./components/SyncStatus";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { TransactionSuccessChart } from "./components/TransactionSuccessChart";
 import {
-  fetchHealth,
   fetchHistory,
-  fetchRecentFees,
-  fetchRecentLedgers,
   HISTORY_RANGES,
   type HistoryPoint,
   type HistoryRange,

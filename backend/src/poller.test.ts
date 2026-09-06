@@ -73,7 +73,6 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
   describe("Backoff growth and ceiling", () => {
     it("doubles backoff delay on successive failures: 1s, 2s, 4s, ..., and caps at 30s", async () => {
-      const scheduledDelays: number[] = [];
       const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
       mockConnectHorizonLedgerStream.mockRejectedValue(new Error("Stream drop"));
