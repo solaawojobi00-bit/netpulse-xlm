@@ -12,6 +12,12 @@ updates:
     labels:
       - dependencies
       - backend
+    # TypeScript 7.0 is the Go rewrite of the compiler (typescript-go), not an
+    # incremental release. Adopting it is a deliberate migration, not a routine
+    # bump, so hold majors here and let minor/patch flow normally.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -31,6 +37,20 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      # @vitejs/plugin-react declares a peer range on vite, so a major bump to
+      # either alone is unresolvable: plugin-react 4 tops out at vite 7, and
+      # plugin-react 6 requires vite 8. vitest is deliberately excluded — its
+      # peer range already spans ^6 || ^7 || ^8, so it need not move in lockstep.
+      vite:
+        patterns:
+          - "vite"
+          - "@vitejs/plugin-react"
+    # Same reasoning as the /backend entry: hold TypeScript majors for a
+    # deliberate typescript-go migration. TS 7 already breaks the frontend build
+    # (TS2882 on the side-effect import of styles.css in src/main.tsx).
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Covers the third-party actions pinned in .github/workflows (checkout,
   # setup-node, gitleaks-action).
