@@ -35,11 +35,17 @@ describe("Logger", () => {
 
   it("logs formatted message with timestamp, level, component, and network when LOG_LEVEL is info", () => {
     process.env.LOG_LEVEL = "info";
-    logger.info("server started", { component: "server", network: "mainnet", port: 4000 });
+    logger.info("server started", {
+      component: "server",
+      network: "mainnet",
+      port: 4000,
+    });
 
     expect(logSpy).toHaveBeenCalledTimes(1);
     const output = logSpy.mock.calls[0][0];
-    expect(output).toMatch(/\[INFO\] \[server\]\[mainnet\] server started {"port":4000}/);
+    expect(output).toMatch(
+      /\[INFO\] \[server\]\[mainnet\] server started {"port":4000}/,
+    );
   });
 
   it("respects log level thresholds", () => {
@@ -50,7 +56,9 @@ describe("Logger", () => {
 
     logger.warn("warning message", { component: "poller" });
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/\[WARN\] \[poller\] warning message/);
+    expect(warnSpy.mock.calls[0][0]).toMatch(
+      /\[WARN\] \[poller\] warning message/,
+    );
 
     logger.error("error message", { component: "db" });
     expect(errorSpy).toHaveBeenCalledTimes(1);
@@ -105,7 +113,10 @@ describe("Logger", () => {
 
   it("keeps primitive error values readable", () => {
     process.env.LOG_LEVEL = "error";
-    logger.error("String rejection", { component: "ws", err: "socket hang up" });
+    logger.error("String rejection", {
+      component: "ws",
+      err: "socket hang up",
+    });
 
     expect(errorSpy.mock.calls[0][0]).toContain("socket hang up");
   });

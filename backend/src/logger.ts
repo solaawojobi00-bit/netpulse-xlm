@@ -72,7 +72,11 @@ function formatError(err: unknown): string {
   }
 }
 
-function output(level: "debug" | "info" | "warn" | "error", message: string, context?: LogContext): void {
+function output(
+  level: "debug" | "info" | "warn" | "error",
+  message: string,
+  context?: LogContext,
+): void {
   const currentLevel = getEffectiveLogLevel();
   if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[currentLevel]) {
     return;
@@ -93,7 +97,10 @@ function output(level: "debug" | "info" | "warn" | "error", message: string, con
     }
   }
 
-  const extraStr = Object.keys(extraFields).length > 0 ? ` ${JSON.stringify(extraFields)}` : "";
+  const extraStr =
+    Object.keys(extraFields).length > 0
+      ? ` ${JSON.stringify(extraFields)}`
+      : "";
   const errStr = formatError(context?.err);
   const line = `${prefix} ${message}${extraStr}${errStr}`;
 

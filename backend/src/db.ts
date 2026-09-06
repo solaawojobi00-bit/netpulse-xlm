@@ -14,7 +14,7 @@ const VALID_CLOSE_TIME = validCloseTimeSql("close_time_seconds");
 const DEFAULT_DB_PATH =
   process.env.NODE_ENV === "test"
     ? ":memory:"
-    : process.env.DATABASE_PATH ?? "./data/netpulse.db";
+    : (process.env.DATABASE_PATH ?? "./data/netpulse.db");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -178,8 +178,14 @@ export class NetPulseDatabase {
   }
 
   /** Adds a column if the table does not already have it. */
-  private ensureColumn(table: string, column: string, definition: string): void {
-    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+  private ensureColumn(
+    table: string,
+    column: string,
+    definition: string,
+  ): void {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{
       name: string;
     }>;
     if (columns.some((c) => c.name === column)) return;
@@ -240,7 +246,9 @@ export class NetPulseDatabase {
   /** Deletes raw rows below an already-floored cutoff, from both tables. */
   private deleteRawBefore(cutoff: number): void {
     this.db.prepare("DELETE FROM ledgers WHERE closed_at_unix < ?").run(cutoff);
-    this.db.prepare("DELETE FROM fee_snapshots WHERE fetched_at_unix < ?").run(cutoff);
+    this.db
+      .prepare("DELETE FROM fee_snapshots WHERE fetched_at_unix < ?")
+      .run(cutoff);
   }
 
   /**
@@ -383,7 +391,10 @@ export class NetPulseDatabase {
     this.deleteRawBefore(floorToUtcMidnight(Date.now() - retentionMs));
   }
 
-  getHistory(network: string = "mainnet", durationHours: number = 24): HistoryResponse {
+  getHistory(
+    network: string = "mainnet",
+    durationHours: number = 24,
+  ): HistoryResponse {
     const durationMs = durationHours * 60 * 60 * 1000;
     const sinceUnix = Date.now() - durationMs;
 
@@ -452,8 +463,12 @@ export class NetPulseDatabase {
 
       return {
         timestamp: new Date(bucketTime).toISOString(),
-        closeTimeSeconds: l?.avg_close_time ? Number(l.avg_close_time.toFixed(2)) : null,
-        congestionUsage: f?.avg_capacity_usage ? Number(f.avg_capacity_usage.toFixed(4)) : null,
+        closeTimeSeconds: l?.avg_close_time
+          ? Number(l.avg_close_time.toFixed(2))
+          : null,
+        congestionUsage: f?.avg_capacity_usage
+          ? Number(f.avg_capacity_usage.toFixed(4))
+          : null,
         operations: l?.total_ops ?? 0,
         transactions: l?.total_txs ?? 0,
         p50Fee: f?.avg_p50 ? Math.round(f.avg_p50) : null,
@@ -480,7 +495,10 @@ export class NetPulseDatabase {
    * backend was down has no row, and reads as a gap in the chart rather than
    * as a day on which the network carried no traffic.
    */
-  getTrends(network: string = "mainnet", durationDays: number = 90): TrendsResponse {
+  getTrends(
+    network: string = "mainnet",
+    durationDays: number = 90,
+  ): TrendsResponse {
     /*
      * The window is a whole number of UTC days back from today's date, so a
      * `30d` request spans today plus the 29 days before it and the boundary
@@ -492,7 +510,8 @@ export class NetPulseDatabase {
      * It is kept because the alternative reads as "29 days and some hours ago"
      * and would quietly start mattering if this ever compared instants.
      */
-    const sinceUnix = floorToUtcMidnight(Date.now()) - (durationDays - 1) * DAY_MS;
+    const sinceUnix =
+      floorToUtcMidnight(Date.now()) - (durationDays - 1) * DAY_MS;
     const sinceDate = new Date(sinceUnix).toISOString().slice(0, 10);
 
     const rows = this.db
@@ -569,8 +588,9 @@ export function getDb(): NetPulseDatabase {
 export const db = {
   insertLedgers: (...args: Parameters<NetPulseDatabase["insertLedgers"]>) =>
     getDb().insertLedgers(...args),
-  insertFeeSnapshot: (...args: Parameters<NetPulseDatabase["insertFeeSnapshot"]>) =>
-    getDb().insertFeeSnapshot(...args),
+  insertFeeSnapshot: (
+    ...args: Parameters<NetPulseDatabase["insertFeeSnapshot"]>
+  ) => getDb().insertFeeSnapshot(...args),
   /*
    * `pruneOlderThan` is deliberately absent. It deletes raw rows without
    * summarising them first, which is a one-way door — the only reachable

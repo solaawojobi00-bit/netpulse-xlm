@@ -97,7 +97,13 @@ describe("useSubscription snapshot handling", () => {
   it("applies a full snapshot for the current network", async () => {
     const { result } = renderHook(() => useSubscription("mainnet"));
 
-    deliver({ type: "snapshot", network: "mainnet", health, ledgers, fees: [] });
+    deliver({
+      type: "snapshot",
+      network: "mainnet",
+      health,
+      ledgers,
+      fees: [],
+    });
 
     await waitFor(() => expect(result.current.health).toEqual(health));
     expect(result.current.ledgers).toEqual(ledgers);
@@ -113,7 +119,13 @@ describe("useSubscription snapshot handling", () => {
   it("leaves existing state intact when a later frame omits fields", async () => {
     const { result } = renderHook(() => useSubscription("mainnet"));
 
-    deliver({ type: "snapshot", network: "mainnet", health, ledgers, fees: [] });
+    deliver({
+      type: "snapshot",
+      network: "mainnet",
+      health,
+      ledgers,
+      fees: [],
+    });
     await waitFor(() => expect(result.current.health).toEqual(health));
 
     // A partial frame: health only, no ledgers.
@@ -126,7 +138,13 @@ describe("useSubscription snapshot handling", () => {
   it("ignores a snapshot addressed to a different network", async () => {
     const { result } = renderHook(() => useSubscription("mainnet"));
 
-    deliver({ type: "snapshot", network: "testnet", health, ledgers, fees: [] });
+    deliver({
+      type: "snapshot",
+      network: "testnet",
+      health,
+      ledgers,
+      fees: [],
+    });
 
     await waitFor(() => expect(FakeWebSocket.last).not.toBeNull());
     expect(result.current.health).toBeNull();

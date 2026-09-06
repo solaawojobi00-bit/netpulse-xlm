@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SHUTDOWN_TIMEOUT_MS, createShutdownRunner } from "./shutdown.js";
+import {
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  createShutdownRunner,
+} from "./shutdown.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -20,9 +23,10 @@ describe("createShutdownRunner", () => {
     // run twice or throw.
     let release!: () => void;
     const run = vi.fn(
-      () => new Promise<void>((resolve) => {
-        release = resolve;
-      }),
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
     );
     const shutdown = createShutdownRunner({ run });
 

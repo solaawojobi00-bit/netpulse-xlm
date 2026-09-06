@@ -100,7 +100,11 @@ export function ChartCard({
       )}
 
       {status === "loading" && (
-        <div className="chart-card__state" role="status" aria-label={`${title}: loading`}>
+        <div
+          className="chart-card__state"
+          role="status"
+          aria-label={`${title}: loading`}
+        >
           <div className="chart-skeleton" aria-hidden="true">
             {[68, 42, 84, 55, 73, 38].map((height, i) => (
               <span

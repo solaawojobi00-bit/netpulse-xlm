@@ -109,9 +109,19 @@ const routes = {
     breakdown: [
       { type: "payment", count: 520, share: 0.4407, isOther: false },
       { type: "manage_sell_offer", count: 240, share: 0.2034, isOther: false },
-      { type: "path_payment_strict_send", count: 165, share: 0.1398, isOther: false },
+      {
+        type: "path_payment_strict_send",
+        count: 165,
+        share: 0.1398,
+        isOther: false,
+      },
       { type: "change_trust", count: 110, share: 0.0932, isOther: false },
-      { type: "invoke_host_function", count: 74, share: 0.0627, isOther: false },
+      {
+        type: "invoke_host_function",
+        count: 74,
+        share: 0.0627,
+        isOther: false,
+      },
       { type: "create_account", count: 41, share: 0.0347, isOther: false },
       { type: "other", count: 30, share: 0.0254, isOther: true },
     ],
@@ -153,7 +163,10 @@ async function newPage(width, height, theme) {
     const path = new URL(route.request().url()).pathname;
     const body = routes[path];
     if (!body) return route.fulfill({ status: 404, body: "{}" });
-    route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
   });
   await page.goto(base, { waitUntil: "networkidle" });
   // Wait on the Recharts surface rather than anything this branch introduced,
@@ -167,7 +180,11 @@ async function newPage(width, height, theme) {
 console.log("\n=== axe-core in Chromium (real cascaded colours) ===\n");
 
 for (const theme of ["dark", "light"]) {
-  for (const [label, width] of [["desktop", 1280], ["tablet", 768], ["mobile", 375]]) {
+  for (const [label, width] of [
+    ["desktop", 1280],
+    ["tablet", 768],
+    ["mobile", 375],
+  ]) {
     const { context, page } = await newPage(width, 900, theme);
     await page.addScriptTag({ content: axeSource });
     /*
@@ -199,7 +216,9 @@ for (const theme of ["dark", "light"]) {
   }
 }
 
-console.log("\n=== Keyboard-only pass (Tab order, activation, focus ring) ===\n");
+console.log(
+  "\n=== Keyboard-only pass (Tab order, activation, focus ring) ===\n",
+);
 {
   const { context, page } = await newPage(1280, 900, "dark");
 
@@ -219,7 +238,9 @@ console.log("\n=== Keyboard-only pass (Tab order, activation, focus ring) ===\n"
       return {
         tag: el.tagName.toLowerCase(),
         // What a screen reader would actually announce on landing here.
-        name: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 34),
+        name: (el.getAttribute("aria-label") || el.textContent || "")
+          .trim()
+          .slice(0, 34),
         pressed: el.getAttribute("aria-pressed"),
         role: el.getAttribute("role"),
         // A stop is "dead" when it lands inside a presentational subtree: the
@@ -236,7 +257,8 @@ console.log("\n=== Keyboard-only pass (Tab order, activation, focus ring) ===\n"
   }
 
   for (const el of order) {
-    const ring = parseFloat(el.outlineWidth) > 0 ? `ring ${el.outlineWidth}` : "NO RING";
+    const ring =
+      parseFloat(el.outlineWidth) > 0 ? `ring ${el.outlineWidth}` : "NO RING";
     const dead = el.insideRoleImg ? "  <-- DEAD STOP inside role=img" : "";
     if (ring === "NO RING" || el.insideRoleImg) failed = true;
     console.log(
@@ -278,7 +300,10 @@ console.log("\n=== Keyboard-only pass (Tab order, activation, focus ring) ===\n"
 }
 
 console.log("\n=== Breakpoint layout (no horizontal overflow) ===\n");
-for (const [label, width] of [["mobile", 375], ["tablet", 768]]) {
+for (const [label, width] of [
+  ["mobile", 375],
+  ["tablet", 768],
+]) {
   const { context, page } = await newPage(width, 900, "dark");
   const overflow = await page.evaluate(
     (w) => ({

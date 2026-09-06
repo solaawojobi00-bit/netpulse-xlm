@@ -67,7 +67,8 @@ export function closeTimeSecondsBetween(
   if (!previousClosedAt) return null;
 
   const delta =
-    (new Date(closedAt).getTime() - new Date(previousClosedAt).getTime()) / 1000;
+    (new Date(closedAt).getTime() - new Date(previousClosedAt).getTime()) /
+    1000;
 
   return isValidCloseTimeSeconds(delta) ? delta : null;
 }

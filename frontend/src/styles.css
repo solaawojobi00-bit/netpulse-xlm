@@ -125,7 +125,11 @@ body {
   margin: 0;
   background: var(--bg-color);
   color: var(--text-color);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
 }
 
 .app {
@@ -221,7 +225,9 @@ body {
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .theme-toggle:hover {
@@ -312,7 +318,9 @@ body {
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .error-boundary__btn:hover {
@@ -456,7 +464,8 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.4;
   }
   50% {
@@ -759,5 +768,3 @@ body {
     gap: 14px;
   }
 }
-
-

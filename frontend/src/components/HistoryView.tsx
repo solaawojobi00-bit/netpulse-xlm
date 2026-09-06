@@ -64,9 +64,14 @@ export function HistoryView({
 
   const chartData = (points ?? []).map((p) => {
     const d = new Date(p.timestamp);
-    const timeLabel = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timeLabel = d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     const congestionPercent =
-      p.congestionUsage !== null ? Number((p.congestionUsage * 100).toFixed(1)) : null;
+      p.congestionUsage !== null
+        ? Number((p.congestionUsage * 100).toFixed(1))
+        : null;
 
     return {
       time: timeLabel,
@@ -113,7 +118,8 @@ export function HistoryView({
         <div>
           <h2 id="history-heading">{range} Historical Trends</h2>
           <p className="history-section__subtitle">
-            Coarser historical trend view aggregated from persistent SQLite storage
+            Coarser historical trend view aggregated from persistent SQLite
+            storage
           </p>
         </div>
         {headerControls}
@@ -134,7 +140,12 @@ export function HistoryView({
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData} {...chartA11y}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-              <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
+              <XAxis
+                dataKey="time"
+                tick={axisTick}
+                stroke={axisStroke}
+                minTickGap={30}
+              />
               <YAxis tick={axisTick} stroke={axisStroke} width={35} />
               <Tooltip {...tooltipProps} />
               <Line
@@ -163,7 +174,12 @@ export function HistoryView({
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData} {...chartA11y}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid-color)" />
-              <XAxis dataKey="time" tick={axisTick} stroke={axisStroke} minTickGap={30} />
+              <XAxis
+                dataKey="time"
+                tick={axisTick}
+                stroke={axisStroke}
+                minTickGap={30}
+              />
               <YAxis
                 tick={axisTick}
                 stroke={axisStroke}

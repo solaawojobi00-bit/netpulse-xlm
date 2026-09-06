@@ -123,9 +123,7 @@ export function useSubscription(network: Network): SubscriptionData {
       ws.onmessage = (event) => {
         if (cancelled) return;
         try {
-          const payload = JSON.parse(
-            event.data as string,
-          ) as SnapshotMessage;
+          const payload = JSON.parse(event.data as string) as SnapshotMessage;
           if (
             payload.type === "snapshot" &&
             payload.network === networkRef.current

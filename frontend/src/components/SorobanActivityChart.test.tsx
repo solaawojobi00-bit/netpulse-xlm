@@ -31,9 +31,13 @@ describe("SorobanActivityChart", () => {
     // would report a quiet network we have not actually observed.
     render(<SorobanActivityChart soroban={null} />);
 
-    expect(screen.getByText("Soroban Contract Invocations")).toBeInTheDocument();
+    expect(
+      screen.getByText("Soroban Contract Invocations"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.queryByText(/No Soroban smart contract invocations/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/No Soroban smart contract invocations/i),
+    ).not.toBeInTheDocument();
   });
 
   it("reports a genuinely quiet window as empty once metrics have arrived", () => {
@@ -50,20 +54,26 @@ describe("SorobanActivityChart", () => {
       />,
     );
 
-    expect(screen.getByText(/No Soroban smart contract invocations/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No Soroban smart contract invocations/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("surfaces an error when metrics failed and nothing was ever loaded", () => {
     render(<SorobanActivityChart soroban={null} error="connection lost" />);
 
-    expect(screen.getByText(/Could not load Soroban metrics/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not load Soroban metrics/i),
+    ).toBeInTheDocument();
   });
 
   it("renders metrics stats and heading with data", () => {
     render(<SorobanActivityChart soroban={mockSoroban} />);
 
-    expect(screen.getByText("Soroban Contract Invocations")).toBeInTheDocument();
+    expect(
+      screen.getByText("Soroban Contract Invocations"),
+    ).toBeInTheDocument();
     expect(screen.getByText("1.5")).toBeInTheDocument();
     expect(screen.getByText(/15 total in window/i)).toBeInTheDocument();
   });

@@ -22,7 +22,9 @@ describe("resolveValueStatus", () => {
 
   it("prefers an existing source over an error, like the chart rule", () => {
     // A dropped socket should not blank numbers that are seconds old.
-    expect(resolveValueStatus({ ok: true }, "backend unreachable")).toBe("ready");
+    expect(resolveValueStatus({ ok: true }, "backend unreachable")).toBe(
+      "ready",
+    );
   });
 
   it("treats falsy-but-present values as present", () => {

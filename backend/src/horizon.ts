@@ -5,7 +5,8 @@ import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 export const HORIZON_URLS = {
   mainnet: process.env.HORIZON_URL ?? "https://horizon.stellar.org",
-  testnet: process.env.HORIZON_TESTNET_URL ?? "https://horizon-testnet.stellar.org",
+  testnet:
+    process.env.HORIZON_TESTNET_URL ?? "https://horizon-testnet.stellar.org",
 } as const;
 
 export type Network = keyof typeof HORIZON_URLS;
@@ -17,7 +18,9 @@ export const numericCoerce = z
   .refine(
     (v) => {
       if (typeof v === "number") return !Number.isNaN(v);
-      return typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v));
+      return (
+        typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))
+      );
     },
     { message: "Expected numeric string or number" },
   )
@@ -43,7 +46,9 @@ export const HorizonLedgersResponseSchema = z.object({
   }),
 });
 
-export type HorizonLedgersResponse = z.infer<typeof HorizonLedgersResponseSchema>;
+export type HorizonLedgersResponse = z.infer<
+  typeof HorizonLedgersResponseSchema
+>;
 
 export const HorizonFeeStatsResponseSchema = z.object({
   last_ledger_base_fee: numericCoerce,
@@ -56,7 +61,9 @@ export const HorizonFeeStatsResponseSchema = z.object({
   }),
 });
 
-export type HorizonFeeStatsResponse = z.infer<typeof HorizonFeeStatsResponseSchema>;
+export type HorizonFeeStatsResponse = z.infer<
+  typeof HorizonFeeStatsResponseSchema
+>;
 
 export const HorizonOperationRecordSchema = z.object({
   id: z.string(),
@@ -67,7 +74,9 @@ export const HorizonOperationRecordSchema = z.object({
   created_at: z.string(),
 });
 
-export type HorizonOperationRecord = z.infer<typeof HorizonOperationRecordSchema>;
+export type HorizonOperationRecord = z.infer<
+  typeof HorizonOperationRecordSchema
+>;
 
 export const HorizonOperationsResponseSchema = z.object({
   _embedded: z.object({
@@ -75,7 +84,9 @@ export const HorizonOperationsResponseSchema = z.object({
   }),
 });
 
-export type HorizonOperationsResponse = z.infer<typeof HorizonOperationsResponseSchema>;
+export type HorizonOperationsResponse = z.infer<
+  typeof HorizonOperationsResponseSchema
+>;
 
 async function horizonFetch<T>(
   path: string,
@@ -94,7 +105,9 @@ async function horizonFetch<T>(
     const issueDetails = parsed.error.issues
       .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
       .join("; ");
-    throw new Error(`Horizon schema validation failed for ${path}: ${issueDetails}`);
+    throw new Error(
+      `Horizon schema validation failed for ${path}: ${issueDetails}`,
+    );
   }
   return parsed.data;
 }
@@ -180,7 +193,10 @@ export function recordToSample(
   record: HorizonLedgerRecord,
   prevClosedAt?: string | null,
 ): LedgerSample {
-  const closeTimeSeconds = closeTimeSecondsBetween(prevClosedAt, record.closed_at);
+  const closeTimeSeconds = closeTimeSecondsBetween(
+    prevClosedAt,
+    record.closed_at,
+  );
 
   return {
     sequence: record.sequence,
@@ -246,9 +262,12 @@ export async function connectHorizonLedgerStream(
                 const issueDetails = parsed.error.issues
                   .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
                   .join("; ");
-                logger.warn(`Malformed SSE ledger record skipped: ${issueDetails}`, {
-                  component: "stream",
-                });
+                logger.warn(
+                  `Malformed SSE ledger record skipped: ${issueDetails}`,
+                  {
+                    component: "stream",
+                  },
+                );
               }
             } catch {
               // Ignore non-JSON or heartbeat comments

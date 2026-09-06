@@ -8,12 +8,14 @@ const mockFetchRecentLedgers = vi.fn();
 const mockFetchFeeStats = vi.fn();
 
 vi.mock("./horizon.js", async () => {
-  const actual = await vi.importActual<typeof import("./horizon.js")>("./horizon.js");
+  const actual =
+    await vi.importActual<typeof import("./horizon.js")>("./horizon.js");
   return {
     ...actual,
     fetchRecentLedgers: (...args: any[]) => mockFetchRecentLedgers(...args),
     fetchFeeStats: (...args: any[]) => mockFetchFeeStats(...args),
-    connectHorizonLedgerStream: (...args: any[]) => mockConnectHorizonLedgerStream(...args),
+    connectHorizonLedgerStream: (...args: any[]) =>
+      mockConnectHorizonLedgerStream(...args),
   };
 });
 
@@ -22,7 +24,10 @@ import { startStreamForNetwork, stores } from "./poller.js";
 describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
   let controller: AbortController;
 
-  const mockLedger = (seq: number, closedAt: string = "2026-09-02T12:00:00Z"): LedgerSample => ({
+  const mockLedger = (
+    seq: number,
+    closedAt: string = "2026-09-02T12:00:00Z",
+  ): LedgerSample => ({
     sequence: seq,
     closedAt,
     closeTimeSeconds: 5.0,
@@ -75,7 +80,9 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
     it("doubles backoff delay on successive failures: 1s, 2s, 4s, ..., and caps at 30s", async () => {
       const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
-      mockConnectHorizonLedgerStream.mockRejectedValue(new Error("Stream drop"));
+      mockConnectHorizonLedgerStream.mockRejectedValue(
+        new Error("Stream drop"),
+      );
 
       const streamPromise = startStreamForNetwork("mainnet", controller.signal);
 
@@ -104,33 +111,35 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
       const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
       let callCount = 0;
-      mockConnectHorizonLedgerStream.mockImplementation(async (_url, _cursor, onLedger) => {
-        callCount++;
-        if (callCount === 1) {
-          // First failure: backoff will be 1000ms -> next 2000ms
-          throw new Error("Drop 1");
-        } else if (callCount === 2) {
-          // Second failure: backoff will be 2000ms -> next 4000ms
-          throw new Error("Drop 2");
-        } else if (callCount === 3) {
-          // Success: receive a ledger, then throw
-          const record: HorizonLedgerRecord = {
-            sequence: 101,
-            closed_at: "2026-09-02T12:00:05Z",
-            successful_transaction_count: 5,
-            failed_transaction_count: 0,
-            operation_count: 10,
-            tx_set_operation_count: 10,
-            base_fee_in_stroops: 100,
-            max_tx_set_size: 1000,
-          };
-          onLedger(record);
-          throw new Error("Drop 3 after success");
-        } else {
-          // Fourth failure: delay should have been reset to 1000ms!
-          throw new Error("Drop 4");
-        }
-      });
+      mockConnectHorizonLedgerStream.mockImplementation(
+        async (_url, _cursor, onLedger) => {
+          callCount++;
+          if (callCount === 1) {
+            // First failure: backoff will be 1000ms -> next 2000ms
+            throw new Error("Drop 1");
+          } else if (callCount === 2) {
+            // Second failure: backoff will be 2000ms -> next 4000ms
+            throw new Error("Drop 2");
+          } else if (callCount === 3) {
+            // Success: receive a ledger, then throw
+            const record: HorizonLedgerRecord = {
+              sequence: 101,
+              closed_at: "2026-09-02T12:00:05Z",
+              successful_transaction_count: 5,
+              failed_transaction_count: 0,
+              operation_count: 10,
+              tx_set_operation_count: 10,
+              base_fee_in_stroops: 100,
+              max_tx_set_size: 1000,
+            };
+            onLedger(record);
+            throw new Error("Drop 3 after success");
+          } else {
+            // Fourth failure: delay should have been reset to 1000ms!
+            throw new Error("Drop 4");
+          }
+        },
+      );
 
       const streamPromise = startStreamForNetwork("mainnet", controller.signal);
 
@@ -161,7 +170,10 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
      * whether or not the warm-up produced ledgers.
      */
     it("seeds the initial cursor with 'now', never a ledger sequence", async () => {
-      mockFetchRecentLedgers.mockResolvedValue([mockLedger(100), mockLedger(105)]);
+      mockFetchRecentLedgers.mockResolvedValue([
+        mockLedger(100),
+        mockLedger(105),
+      ]);
 
       mockConnectHorizonLedgerStream.mockImplementation(async () => {
         controller.abort();
@@ -200,43 +212,45 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
       mockFetchRecentLedgers.mockResolvedValue([mockLedger(200)]);
 
       let iteration = 0;
-      mockConnectHorizonLedgerStream.mockImplementation(async (_url, cursor, onLedger) => {
-        cursorsPassed.push(cursor);
-        iteration++;
-        if (iteration === 1) {
-          // First stream receives a record with paging_token
-          onLedger({
-            sequence: 201,
-            paging_token: "token-201",
-            closed_at: "2026-09-02T12:00:05Z",
-            successful_transaction_count: 5,
-            failed_transaction_count: 0,
-            operation_count: 10,
-            tx_set_operation_count: 10,
-            base_fee_in_stroops: 100,
-            max_tx_set_size: 1000,
-          });
-          throw new Error("Disconnect 1");
-        } else if (iteration === 2) {
-          // Second stream receives a record with no paging_token. The cursor
-          // must stay on the last good token rather than fall back to a
-          // sequence, which is the same wrong kind of identifier as the old
-          // seed (#84).
-          onLedger({
-            sequence: 202,
-            closed_at: "2026-09-02T12:00:10Z",
-            successful_transaction_count: 8,
-            failed_transaction_count: 0,
-            operation_count: 12,
-            tx_set_operation_count: 12,
-            base_fee_in_stroops: 100,
-            max_tx_set_size: 1000,
-          });
-          throw new Error("Disconnect 2");
-        } else {
-          controller.abort();
-        }
-      });
+      mockConnectHorizonLedgerStream.mockImplementation(
+        async (_url, cursor, onLedger) => {
+          cursorsPassed.push(cursor);
+          iteration++;
+          if (iteration === 1) {
+            // First stream receives a record with paging_token
+            onLedger({
+              sequence: 201,
+              paging_token: "token-201",
+              closed_at: "2026-09-02T12:00:05Z",
+              successful_transaction_count: 5,
+              failed_transaction_count: 0,
+              operation_count: 10,
+              tx_set_operation_count: 10,
+              base_fee_in_stroops: 100,
+              max_tx_set_size: 1000,
+            });
+            throw new Error("Disconnect 1");
+          } else if (iteration === 2) {
+            // Second stream receives a record with no paging_token. The cursor
+            // must stay on the last good token rather than fall back to a
+            // sequence, which is the same wrong kind of identifier as the old
+            // seed (#84).
+            onLedger({
+              sequence: 202,
+              closed_at: "2026-09-02T12:00:10Z",
+              successful_transaction_count: 8,
+              failed_transaction_count: 0,
+              operation_count: 12,
+              tx_set_operation_count: 12,
+              base_fee_in_stroops: 100,
+              max_tx_set_size: 1000,
+            });
+            throw new Error("Disconnect 2");
+          } else {
+            controller.abort();
+          }
+        },
+      );
 
       const streamPromise = startStreamForNetwork("mainnet", controller.signal);
 
@@ -263,7 +277,11 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
       mockFetchRecentLedgers.mockResolvedValue(warmUp);
 
       mockConnectHorizonLedgerStream.mockImplementation(
-        async (_url: string, _cursor: string, onLedger: (r: HorizonLedgerRecord) => void) => {
+        async (
+          _url: string,
+          _cursor: string,
+          onLedger: (r: HorizonLedgerRecord) => void,
+        ) => {
           onLedger(record);
           controller.abort();
         },
@@ -271,7 +289,9 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
       await startStreamForNetwork("mainnet", controller.signal);
 
-      return stores.mainnet.getLedgers().find((l) => l.sequence === record.sequence);
+      return stores.mainnet
+        .getLedgers()
+        .find((l) => l.sequence === record.sequence);
     };
 
     const streamedRecord = (

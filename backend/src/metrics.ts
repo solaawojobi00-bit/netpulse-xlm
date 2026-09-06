@@ -26,7 +26,9 @@ export function congestionBand(
   return "high";
 }
 
-export function buildHealthResponse(network: Network = "mainnet"): HealthResponse {
+export function buildHealthResponse(
+  network: Network = "mainnet",
+): HealthResponse {
   const currentStore = stores[network] ?? stores.mainnet;
   const horizonUrl = HORIZON_URLS[network] ?? HORIZON_URLS.mainnet;
   const ledgers = currentStore.getLedgers();
@@ -66,7 +68,8 @@ export function buildHealthResponse(network: Network = "mainnet"): HealthRespons
     ? (Date.now() - lastSuccessAt.getTime()) / 1000
     : null;
   const isStale =
-    lastSuccessAt === null || Date.now() - lastSuccessAt.getTime() > STALE_AFTER_MS;
+    lastSuccessAt === null ||
+    Date.now() - lastSuccessAt.getTime() > STALE_AFTER_MS;
 
   return {
     status: isStale ? "stale" : "ok",
@@ -86,14 +89,21 @@ export function buildHealthResponse(network: Network = "mainnet"): HealthRespons
     },
     congestion: {
       ledgerCapacityUsage: latestFee?.ledgerCapacityUsage ?? null,
-      band: congestionBand(latestFee?.ledgerCapacityUsage ?? null, alertThreshold),
+      band: congestionBand(
+        latestFee?.ledgerCapacityUsage ?? null,
+        alertThreshold,
+      ),
       alertThreshold,
     },
     throughput: {
       operationsPerSecond:
-        windowSpanSeconds && windowSpanSeconds > 0 ? totalOps / windowSpanSeconds : null,
+        windowSpanSeconds && windowSpanSeconds > 0
+          ? totalOps / windowSpanSeconds
+          : null,
       transactionsPerSecond:
-        windowSpanSeconds && windowSpanSeconds > 0 ? totalTxs / windowSpanSeconds : null,
+        windowSpanSeconds && windowSpanSeconds > 0
+          ? totalTxs / windowSpanSeconds
+          : null,
     },
     recentLedgerCount: ledgers.length,
   };

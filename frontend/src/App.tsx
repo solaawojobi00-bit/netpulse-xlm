@@ -54,14 +54,24 @@ export function App() {
    * synchronously on first render, so a URL carrying params paints that view
    * directly rather than showing mainnet/24h and snapping.
    */
-  const [network, setNetwork] = useQueryParam<Network>("network", NETWORKS, "mainnet");
-  const [range, setRange] = useQueryParam<HistoryRange>("range", HISTORY_RANGES, "24h");
+  const [network, setNetwork] = useQueryParam<Network>(
+    "network",
+    NETWORKS,
+    "mainnet",
+  );
+  const [range, setRange] = useQueryParam<HistoryRange>(
+    "range",
+    HISTORY_RANGES,
+    "24h",
+  );
   const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, operationBreakdown, error } =
     useSubscription(network);
   // null until the first fetch resolves, so HistoryView can tell "still
   // loading" apart from "loaded and empty".
-  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[] | null>(null);
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[] | null>(
+    null,
+  );
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,13 +131,16 @@ export function App() {
           </div>
           <div className="app__header-actions">
             {health?.horizonUrl && (
-              <span className="network-badge">{formatHorizonEndpoint(health.horizonUrl)}</span>
+              <span className="network-badge">
+                {formatHorizonEndpoint(health.horizonUrl)}
+              </span>
             )}
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
         </div>
         <p className="app__subtitle">
-          Live Stellar {network === "testnet" ? "testnet" : "mainnet"} health, via public Horizon
+          Live Stellar {network === "testnet" ? "testnet" : "mainnet"} health,
+          via public Horizon
         </p>
       </header>
 
@@ -152,8 +165,8 @@ export function App() {
           */}
           {health?.congestion.band === "high" && (
             <div className="banner banner--danger" role="status">
-              <strong>High Network Congestion:</strong> Ledger capacity usage is currently{" "}
-              {formatPercent(health.congestion.ledgerCapacityUsage)}
+              <strong>High Network Congestion:</strong> Ledger capacity usage is
+              currently {formatPercent(health.congestion.ledgerCapacityUsage)}
               {health.congestion.alertThreshold !== undefined &&
                 ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
               . Transactions may experience surge pricing or delayed inclusion.
@@ -174,13 +187,18 @@ export function App() {
             anyone navigating by heading without changing the visual design,
             which has no room for them.
           */}
-          <section className="stat-grid" aria-labelledby="current-status-heading">
+          <section
+            className="stat-grid"
+            aria-labelledby="current-status-heading"
+          >
             <h2 id="current-status-heading" className="visually-hidden">
               Current network status
             </h2>
             <StatTile
               label="Ledger close time"
-              value={formatSeconds(health?.ledgerCloseTime.currentSeconds ?? null)}
+              value={formatSeconds(
+                health?.ledgerCloseTime.currentSeconds ?? null,
+              )}
               sublabel={`avg ${formatSeconds(health?.ledgerCloseTime.averageSeconds ?? null)}`}
               status={statStatus}
             />
@@ -196,7 +214,9 @@ export function App() {
             */}
             <StatTile
               label="Network congestion"
-              value={formatPercent(health?.congestion.ledgerCapacityUsage ?? null)}
+              value={formatPercent(
+                health?.congestion.ledgerCapacityUsage ?? null,
+              )}
               band={health?.congestion.band ?? "unknown"}
               tone={congestionTone[health?.congestion.band ?? "unknown"]}
               status={statStatus}

@@ -61,7 +61,11 @@ describe("ChartCard", () => {
 
   it("says an empty window is empty, in words", () => {
     render(
-      <ChartCard title="Ops" status="empty" emptyMessage="No ledgers in this window.">
+      <ChartCard
+        title="Ops"
+        status="empty"
+        emptyMessage="No ledgers in this window."
+      >
         <p>chart body</p>
       </ChartCard>,
     );
@@ -71,12 +75,19 @@ describe("ChartCard", () => {
 
   it("announces an error rather than looking like an empty chart", () => {
     render(
-      <ChartCard title="Ops" status="error" errorMessage="Could not load ledger data.">
+      <ChartCard
+        title="Ops"
+        status="error"
+        errorMessage="Could not load ledger data."
+      >
         <p>chart body</p>
       </ChartCard>,
     );
 
-    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Ops: unavailable");
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "aria-label",
+      "Ops: unavailable",
+    );
     expect(screen.getByText("Could not load ledger data.")).toBeInTheDocument();
     expect(screen.queryByText("chart body")).not.toBeInTheDocument();
   });

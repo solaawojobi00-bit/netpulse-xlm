@@ -12,14 +12,15 @@ describe("parseAllowedOrigins", () => {
   });
 
   it("splits a comma-separated list and trims whitespace", () => {
-    expect(parseAllowedOrigins("https://a.example, https://b.example")).toEqual([
-      "https://a.example",
-      "https://b.example",
-    ]);
+    expect(parseAllowedOrigins("https://a.example, https://b.example")).toEqual(
+      ["https://a.example", "https://b.example"],
+    );
   });
 
   it("normalises trailing slashes so both spellings match", () => {
-    expect(parseAllowedOrigins("https://a.example/")).toEqual(["https://a.example"]);
+    expect(parseAllowedOrigins("https://a.example/")).toEqual([
+      "https://a.example",
+    ]);
   });
 });
 
@@ -107,7 +108,10 @@ describe("WebSocket handshake origin validation", () => {
   }
 
   function connect(port: number, origin?: string) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, origin ? { origin } : {});
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/ws`,
+      origin ? { origin } : {},
+    );
     return new Promise<{ opened: boolean; status?: number }>((resolve) => {
       ws.on("open", () => {
         ws.close();
@@ -125,9 +129,11 @@ describe("WebSocket handshake origin validation", () => {
 
   it("accepts a connection from the default allowed origin", async () => {
     const port = await listen();
-    await expect(connect(port, "http://localhost:5173")).resolves.toMatchObject({
-      opened: true,
-    });
+    await expect(connect(port, "http://localhost:5173")).resolves.toMatchObject(
+      {
+        opened: true,
+      },
+    );
   });
 
   it("refuses a disallowed origin at the upgrade stage with 403", async () => {
@@ -149,13 +155,15 @@ describe("WebSocket handshake origin validation", () => {
       origin: "http://localhost:5173",
     });
 
-    const outcome = await new Promise<{ kind: string; status?: number }>((resolve) => {
-      other.on("open", () => resolve({ kind: "opened" }));
-      other.on("unexpected-response", (_req, res) =>
-        resolve({ kind: "rejected", status: res.statusCode }),
-      );
-      other.on("error", () => resolve({ kind: "error" }));
-    });
+    const outcome = await new Promise<{ kind: string; status?: number }>(
+      (resolve) => {
+        other.on("open", () => resolve({ kind: "opened" }));
+        other.on("unexpected-response", (_req, res) =>
+          resolve({ kind: "rejected", status: res.statusCode }),
+        );
+        other.on("error", () => resolve({ kind: "error" }));
+      },
+    );
 
     expect(outcome.kind).toBe("rejected");
     expect(outcome.status).toBe(404);

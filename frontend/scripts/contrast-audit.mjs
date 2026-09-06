@@ -157,14 +157,43 @@ const themes = {
 const PAIRS = [
   { name: "body text on page", fg: "--text-color", on: "--bg-color" },
   { name: "body text on card", fg: "--text-color", on: "--surface-color" },
-  { name: "h1 (1.75rem/28px)", fg: "--text-color", on: "--bg-color", large: true },
+  {
+    name: "h1 (1.75rem/28px)",
+    fg: "--text-color",
+    on: "--bg-color",
+    large: true,
+  },
   { name: "subtitle", fg: "--text-muted", on: "--bg-color" },
   { name: "footer / sync status", fg: "--text-muted", on: "--bg-color" },
-  { name: "stat tile label + sublabel", fg: "--text-muted", on: "--surface-color" },
-  { name: "stat value 1.6rem (25.6px)", fg: "--text-color", on: "--surface-color", large: true },
-  { name: "stat value, good tone", fg: "--good-color", on: "--surface-color", large: true },
-  { name: "stat value, warn tone", fg: "--warn-color", on: "--surface-color", large: true },
-  { name: "stat value, bad tone", fg: "--bad-color", on: "--surface-color", large: true },
+  {
+    name: "stat tile label + sublabel",
+    fg: "--text-muted",
+    on: "--surface-color",
+  },
+  {
+    name: "stat value 1.6rem (25.6px)",
+    fg: "--text-color",
+    on: "--surface-color",
+    large: true,
+  },
+  {
+    name: "stat value, good tone",
+    fg: "--good-color",
+    on: "--surface-color",
+    large: true,
+  },
+  {
+    name: "stat value, warn tone",
+    fg: "--warn-color",
+    on: "--surface-color",
+    large: true,
+  },
+  {
+    name: "stat value, bad tone",
+    fg: "--bad-color",
+    on: "--surface-color",
+    large: true,
+  },
   /*
    * Scored at 4.5:1, not 3:1. The tile's "Unavailable" notice is 1rem bold —
    * 16px — and WCAG large text starts at 18.66px bold, so it does not qualify
@@ -172,25 +201,73 @@ const PAIRS = [
    */
   { name: "stat tile, unavailable", fg: "--bad-color", on: "--surface-color" },
   { name: "chart card heading", fg: "--text-muted", on: "--surface-color" },
-  { name: "chart axis ticks (10px)", fg: "--text-muted", on: "--surface-color" },
+  {
+    name: "chart axis ticks (10px)",
+    fg: "--text-muted",
+    on: "--surface-color",
+  },
   { name: "chart empty-state text", fg: "--text-muted", on: "--surface-color" },
   { name: "chart error-state text", fg: "--bad-color", on: "--surface-color" },
-  { name: "network selector, inactive", fg: "--text-muted", on: "--surface-color" },
+  {
+    name: "network selector, inactive",
+    fg: "--text-muted",
+    on: "--surface-color",
+  },
   {
     name: "network selector, active",
     fg: "--accent-color",
     on: "--surface-color",
     tint: "--accent-tint-bg",
   },
-  { name: "congestion chip, good", fg: "--good-color", on: "--surface-color", tint: "--good-tint-bg" },
-  { name: "congestion chip, warn", fg: "--warn-color", on: "--surface-color", tint: "--warn-tint-bg" },
-  { name: "congestion chip, bad", fg: "--bad-color", on: "--surface-color", tint: "--bad-tint-bg" },
+  {
+    name: "congestion chip, good",
+    fg: "--good-color",
+    on: "--surface-color",
+    tint: "--good-tint-bg",
+  },
+  {
+    name: "congestion chip, warn",
+    fg: "--warn-color",
+    on: "--surface-color",
+    tint: "--warn-tint-bg",
+  },
+  {
+    name: "congestion chip, bad",
+    fg: "--bad-color",
+    on: "--surface-color",
+    tint: "--bad-tint-bg",
+  },
   { name: "theme toggle glyph", fg: "--text-muted", on: "--surface-color" },
-  { name: "network badge", fg: "--accent-color", on: "--bg-color", tint: "--accent-tint-bg" },
-  { name: "stale banner", fg: "--warn-color", on: "--bg-color", tint: "--warn-tint-bg" },
-  { name: "congestion banner", fg: "--bad-color", on: "--bg-color", tint: "--bad-tint-bg" },
-  { name: "error boundary title", fg: "--bad-color", on: "--bg-color", tint: "--bad-tint-bg" },
-  { name: "error boundary body", fg: "--text-color", on: "--bg-color", tint: "--bad-tint-bg" },
+  {
+    name: "network badge",
+    fg: "--accent-color",
+    on: "--bg-color",
+    tint: "--accent-tint-bg",
+  },
+  {
+    name: "stale banner",
+    fg: "--warn-color",
+    on: "--bg-color",
+    tint: "--warn-tint-bg",
+  },
+  {
+    name: "congestion banner",
+    fg: "--bad-color",
+    on: "--bg-color",
+    tint: "--bad-tint-bg",
+  },
+  {
+    name: "error boundary title",
+    fg: "--bad-color",
+    on: "--bg-color",
+    tint: "--bad-tint-bg",
+  },
+  {
+    name: "error boundary body",
+    fg: "--text-color",
+    on: "--bg-color",
+    tint: "--bad-tint-bg",
+  },
   { name: "error boundary detail", fg: "--text-muted", on: "--surface-color" },
   { name: "history badge", fg: "--text-muted", on: "--surface-color" },
   { name: "soroban stat pill", fg: "--text-color", on: "--bg-color" },
@@ -204,7 +281,11 @@ const PAIRS = [
  * graphic required to understand it.
  */
 const UI_PAIRS = [
-  { name: "selected network, ring", fg: "--accent-color", on: "--surface-color" },
+  {
+    name: "selected network, ring",
+    fg: "--accent-color",
+    on: "--surface-color",
+  },
   { name: "focus ring on page", fg: "--accent-color", on: "--bg-color" },
   { name: "focus ring on card", fg: "--accent-color", on: "--surface-color" },
   { name: "sync indicator dot, ok", fg: "--good-color", on: "--bg-color" },
@@ -214,10 +295,26 @@ const UI_PAIRS = [
    * the chart, not decoration, so 1.4.11's 3:1 applies to both fills.
    */
   { name: "breakdown bar", fg: "--accent-color", on: "--surface-color" },
-  { name: "breakdown bar, grouped tail", fg: "--text-muted", on: "--surface-color" },
-  { name: "congestion chip border, good", fg: "--good-color", on: "--surface-color" },
-  { name: "congestion chip border, warn", fg: "--warn-color", on: "--surface-color" },
-  { name: "congestion chip border, bad", fg: "--bad-color", on: "--surface-color" },
+  {
+    name: "breakdown bar, grouped tail",
+    fg: "--text-muted",
+    on: "--surface-color",
+  },
+  {
+    name: "congestion chip border, good",
+    fg: "--good-color",
+    on: "--surface-color",
+  },
+  {
+    name: "congestion chip border, warn",
+    fg: "--warn-color",
+    on: "--surface-color",
+  },
+  {
+    name: "congestion chip border, bad",
+    fg: "--bad-color",
+    on: "--surface-color",
+  },
 ];
 
 /*
@@ -269,9 +366,13 @@ const SERIES_PAIRS = [
 let failures = 0;
 
 for (const [themeName, t] of Object.entries(themes)) {
-  console.log(`\n${"=".repeat(72)}\n  ${themeName.toUpperCase()} THEME\n${"=".repeat(72)}`);
+  console.log(
+    `\n${"=".repeat(72)}\n  ${themeName.toUpperCase()} THEME\n${"=".repeat(72)}`,
+  );
   console.log("\n  Text contrast (WCAG AA: 4.5:1 body, 3:1 large)\n");
-  console.log(`  ${"Pair".padEnd(34)}${"Ratio".padEnd(9)}${"Req".padEnd(7)}Result`);
+  console.log(
+    `  ${"Pair".padEnd(34)}${"Ratio".padEnd(9)}${"Req".padEnd(7)}Result`,
+  );
   console.log(`  ${"-".repeat(62)}`);
 
   for (const p of PAIRS) {
@@ -303,18 +404,24 @@ for (const [themeName, t] of Object.entries(themes)) {
   for (const p of INFORMATIONAL_PAIRS) {
     const bg = parseColor(t[p.on]);
     const fg = over(parseColor(t[p.fg]), bg);
-    console.log(`  ${p.name.padEnd(34)}${ratio(fg, bg).toFixed(2).padEnd(9)}${"n/a".padEnd(7)}—`);
+    console.log(
+      `  ${p.name.padEnd(34)}${ratio(fg, bg).toFixed(2).padEnd(9)}${"n/a".padEnd(7)}—`,
+    );
   }
 
-  console.log("\n  Series distinguishability under CVD (CIE76 dE, >20 comfortable)\n");
+  console.log(
+    "\n  Series distinguishability under CVD (CIE76 dE, >20 comfortable)\n",
+  );
   for (const s of SERIES_PAIRS) {
     const a = parseColor(t[s.a]);
     const b = parseColor(t[s.b]);
-    const rows = ["normal", "protanopia", "deuteranopia", "tritanopia"].map((kind) => {
-      const sa = kind === "normal" ? a : simulate(a, kind);
-      const sb = kind === "normal" ? b : simulate(b, kind);
-      return `${kind} ${deltaE(sa, sb).toFixed(0).padStart(3)}`;
-    });
+    const rows = ["normal", "protanopia", "deuteranopia", "tritanopia"].map(
+      (kind) => {
+        const sa = kind === "normal" ? a : simulate(a, kind);
+        const sb = kind === "normal" ? b : simulate(b, kind);
+        return `${kind} ${deltaE(sa, sb).toFixed(0).padStart(3)}`;
+      },
+    );
     const worst = Math.min(
       ...["protanopia", "deuteranopia", "tritanopia"].map((k) =>
         deltaE(simulate(a, k), simulate(b, k)),
@@ -330,6 +437,10 @@ for (const [themeName, t] of Object.entries(themes)) {
 }
 
 console.log(`\n${"=".repeat(72)}`);
-console.log(failures === 0 ? "  All measured pairs meet WCAG AA." : `  ${failures} pair(s) below AA.`);
+console.log(
+  failures === 0
+    ? "  All measured pairs meet WCAG AA."
+    : `  ${failures} pair(s) below AA.`,
+);
 console.log(`${"=".repeat(72)}\n`);
 process.exit(failures === 0 ? 0 : 1);

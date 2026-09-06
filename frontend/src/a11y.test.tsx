@@ -49,7 +49,8 @@ async function expectNoViolations(container: HTMLElement) {
   });
 
   const summary = results.violations.map(
-    (v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.html).join("\n  ")}`,
+    (v) =>
+      `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.html).join("\n  ")}`,
   );
   expect(summary, summary.join("\n\n")).toEqual([]);
 }
@@ -124,20 +125,31 @@ afterEach(() => {
 describe("axe: no mechanical violations", () => {
   it("stat tile, loaded and with a congestion band", async () => {
     const { container } = render(
-      <StatTile label="Network congestion" value="42%" band="moderate" tone="warn" />,
+      <StatTile
+        label="Network congestion"
+        value="42%"
+        band="moderate"
+        tone="warn"
+      />,
     );
     await expectNoViolations(container);
   });
 
   it("stat tile, loading", async () => {
-    const { container } = render(<StatTile label="Base fee" value={null} status="loading" />);
+    const { container } = render(
+      <StatTile label="Base fee" value={null} status="loading" />,
+    );
     await expectNoViolations(container);
   });
 
   it("chart card in every state", async () => {
     for (const status of ["loading", "empty", "error", "ready"] as const) {
       const { container, unmount } = render(
-        <ChartCard title="Ledger close time" status={status} summary="Currently 5 seconds.">
+        <ChartCard
+          title="Ledger close time"
+          status={status}
+          summary="Currently 5 seconds."
+        >
           <div>chart</div>
         </ChartCard>,
       );
@@ -147,7 +159,9 @@ describe("axe: no mechanical violations", () => {
   });
 
   it("history view, loaded", async () => {
-    const { container } = render(<HistoryView points={historyPoints} range="24h" />);
+    const { container } = render(
+      <HistoryView points={historyPoints} range="24h" />,
+    );
     await expectNoViolations(container);
   });
 
@@ -168,7 +182,9 @@ describe("axe: no mechanical violations", () => {
 describe("axe: the assembled page", () => {
   it("has no violations with data loaded", async () => {
     const { container } = render(<App />);
-    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByRole("img").length).toBeGreaterThan(0),
+    );
     await expectNoViolations(container);
   });
 
@@ -200,7 +216,9 @@ describe("axe: the assembled page", () => {
 
   it("keeps an unbroken heading outline: one h1, then h2s, then h3s", async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByRole("img").length).toBeGreaterThan(0),
+    );
 
     const levels = screen
       .getAllByRole("heading")
@@ -217,7 +235,9 @@ describe("axe: the assembled page", () => {
 
   it("puts the dashboard in a main landmark and the sync line in contentinfo", async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByRole("img").length).toBeGreaterThan(0),
+    );
 
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("banner")).toBeInTheDocument();
@@ -243,7 +263,9 @@ describe("axe: the assembled page", () => {
       expect(screen.getByText(/High Network Congestion/)).toBeInTheDocument(),
     );
 
-    const banner = screen.getByText(/High Network Congestion/).closest(".banner");
+    const banner = screen
+      .getByText(/High Network Congestion/)
+      .closest(".banner");
     expect(banner).toHaveAttribute("role", "status");
     // Never assertive: the backend reconnects on its own and the banner flaps.
     expect(banner).not.toHaveAttribute("aria-live", "assertive");
@@ -277,14 +299,18 @@ describe("charts are named after their data", () => {
     render(<LedgerCloseTimeChart ledgers={[]} />);
     // Empty state renders no chart, so there is no img to misname.
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(screen.getByText("No ledger close times in this window.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No ledger close times in this window."),
+    ).toBeInTheDocument();
   });
 
   it("names both history charts distinctly", async () => {
     render(<HistoryView points={historyPoints} range="24h" />);
     await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
 
-    const names = screen.getAllByRole("img").map((el) => el.getAttribute("aria-label"));
+    const names = screen
+      .getAllByRole("img")
+      .map((el) => el.getAttribute("aria-label"));
     expect(names[0]).toContain("Ledger close time");
     expect(names[1]).toContain("Network congestion");
     expect(names[0]).not.toEqual(names[1]);
@@ -293,7 +319,14 @@ describe("charts are named after their data", () => {
 
 describe("state is not carried by colour alone", () => {
   it("renders the congestion band as text beside its glyph", () => {
-    render(<StatTile label="Network congestion" value="88%" band="high" tone="bad" />);
+    render(
+      <StatTile
+        label="Network congestion"
+        value="88%"
+        band="high"
+        tone="bad"
+      />,
+    );
 
     const band = screen.getByText("high");
     expect(band).toBeInTheDocument();
@@ -306,6 +339,8 @@ describe("state is not carried by colour alone", () => {
   it("gives the loading skeleton a name a screen reader will actually use", () => {
     // aria-label on a role-less <div> is ignored; role="status" makes it count.
     render(<StatTile label="Base fee" value={null} status="loading" />);
-    expect(screen.getByRole("status")).toHaveAccessibleName("Base fee: loading");
+    expect(screen.getByRole("status")).toHaveAccessibleName(
+      "Base fee: loading",
+    );
   });
 });

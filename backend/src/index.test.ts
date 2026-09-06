@@ -11,7 +11,11 @@ vi.mock("./horizon.js", () => ({
   fetchRecentOperations: vi.fn(),
 }));
 
-import { fetchFeeStats, fetchRecentLedgers, fetchRecentOperations } from "./horizon.js";
+import {
+  fetchFeeStats,
+  fetchRecentLedgers,
+  fetchRecentOperations,
+} from "./horizon.js";
 import { createApp } from "./index.js";
 import { pollOnce, stores } from "./poller.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
@@ -198,7 +202,9 @@ describe("Backend API Routes", () => {
       vi.mocked(fetchFeeStats).mockResolvedValue(mockFee);
       await pollOnce("testnet");
 
-      const res = await request(app).get("/api/history?network=testnet&range=6h&format=csv");
+      const res = await request(app).get(
+        "/api/history?network=testnet&range=6h&format=csv",
+      );
 
       expect(res.status).toBe(200);
       expect(res.headers["content-disposition"]).toBe(
@@ -242,7 +248,10 @@ describe("Backend API Routes", () => {
       vi.mocked(fetchRecentLedgers).mockResolvedValue([
         { ...mockLedger, sequence: 9001, closedAt },
       ]);
-      vi.mocked(fetchFeeStats).mockResolvedValue({ ...mockFee, fetchedAt: closedAt });
+      vi.mocked(fetchFeeStats).mockResolvedValue({
+        ...mockFee,
+        fetchedAt: closedAt,
+      });
 
       await pollOnce("mainnet");
       db.rollupAndPrune();
@@ -260,7 +269,9 @@ describe("Backend API Routes", () => {
       expect(res.body).toHaveProperty("range", "90d");
       expect(Array.isArray(res.body.points)).toBe(true);
 
-      const point = res.body.points.find((p: { date: string }) => p.date === date);
+      const point = res.body.points.find(
+        (p: { date: string }) => p.date === date,
+      );
       expect(point).toBeDefined();
       expect(point).toHaveProperty("closeTimeSeconds");
       expect(point).toHaveProperty("maxCongestionUsage");
@@ -293,7 +304,12 @@ describe("Backend API Routes", () => {
        * Introducing 4xx here alone would make this endpoint behave unlike its
        * siblings; tightening the whole surface at once is #92.
        */
-      for (const bad of ["?range=10y", "?range=GARBAGE", "?range=", "?range=24h"]) {
+      for (const bad of [
+        "?range=10y",
+        "?range=GARBAGE",
+        "?range=",
+        "?range=24h",
+      ]) {
         const res = await request(app).get(`/api/trends${bad}`);
         expect(res.status).toBe(200);
         expect(res.body.range).toBe("90d");
@@ -411,7 +427,9 @@ describe("Backend API Routes", () => {
       });
 
       it("serves a header-only CSV when nothing is rolled up", async () => {
-        const res = await request(app).get("/api/trends?network=testnet&format=csv");
+        const res = await request(app).get(
+          "/api/trends?network=testnet&format=csv",
+        );
 
         expect(res.status).toBe(200);
         expect(res.text.split("\r\n").filter(Boolean)).toHaveLength(1);
@@ -499,14 +517,17 @@ describe("Backend API Routes", () => {
       );
       expect(payment.count).toBe(2);
       expect(
-        res.body.breakdown.find((b: { type: string }) => b.type === "invoke_host_function")
-          .count,
+        res.body.breakdown.find(
+          (b: { type: string }) => b.type === "invoke_host_function",
+        ).count,
       ).toBe(1);
       expect(res.body.totalOperations).toBe(3);
     });
 
     it("honours the network query param", async () => {
-      const res = await request(app).get("/api/operations/breakdown?network=testnet");
+      const res = await request(app).get(
+        "/api/operations/breakdown?network=testnet",
+      );
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("network", "testnet");

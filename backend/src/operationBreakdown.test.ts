@@ -14,11 +14,16 @@ function ops(type: string, n: number) {
 
 /** Replaces a store's operation samples wholesale. */
 function seed(samples: OperationTypeSample[]) {
-  const store = stores.mainnet as unknown as { operationTypeSamples: OperationTypeSample[] };
+  const store = stores.mainnet as unknown as {
+    operationTypeSamples: OperationTypeSample[];
+  };
   store.operationTypeSamples = samples;
 }
 
-function sample(counts: Record<string, number>, timestamp: string): OperationTypeSample {
+function sample(
+  counts: Record<string, number>,
+  timestamp: string,
+): OperationTypeSample {
   return {
     timestamp,
     total: Object.values(counts).reduce((a, b) => a + b, 0),
@@ -32,7 +37,10 @@ beforeEach(() => {
 
 describe("countOperationTypes", () => {
   it("counts each type and totals them", () => {
-    const result = countOperationTypes([...ops("payment", 3), ...ops("create_account", 2)]);
+    const result = countOperationTypes([
+      ...ops("payment", 3),
+      ...ops("create_account", 2),
+    ]);
 
     expect(result.counts).toEqual({ payment: 3, create_account: 2 });
     expect(result.total).toBe(5);
@@ -61,7 +69,10 @@ describe("countOperationTypes", () => {
     expect(result.counts.payment).toBe(1);
     expect(result.counts[OTHER_OPERATION_TYPE]).toBe(4);
     // Never a key like "undefined" or "null".
-    expect(Object.keys(result.counts).sort()).toEqual([OTHER_OPERATION_TYPE, "payment"]);
+    expect(Object.keys(result.counts).sort()).toEqual([
+      OTHER_OPERATION_TYPE,
+      "payment",
+    ]);
   });
 
   it("bounds the stored key count no matter how many types arrive", () => {
@@ -113,19 +124,32 @@ describe("buildOperationBreakdownResponse", () => {
   });
 
   it("sorts by count descending", () => {
-    seed([sample({ a_low: 1, b_high: 9, c_mid: 5 }, "2026-09-03T12:00:00.000Z")]);
+    seed([
+      sample({ a_low: 1, b_high: 9, c_mid: 5 }, "2026-09-03T12:00:00.000Z"),
+    ]);
 
     const res = buildOperationBreakdownResponse("mainnet");
 
-    expect(res.breakdown.map((b) => b.type)).toEqual(["b_high", "c_mid", "a_low"]);
+    expect(res.breakdown.map((b) => b.type)).toEqual([
+      "b_high",
+      "c_mid",
+      "a_low",
+    ]);
   });
 
   it("groups everything past the top six into a single other row", () => {
     seed([
       sample(
         {
-          t1: 100, t2: 90, t3: 80, t4: 70, t5: 60, t6: 50,
-          tail1: 5, tail2: 3, tail3: 2,
+          t1: 100,
+          t2: 90,
+          t3: 80,
+          t4: 70,
+          t5: 60,
+          t6: 50,
+          tail1: 5,
+          tail2: 3,
+          tail3: 2,
         },
         "2026-09-03T12:00:00.000Z",
       ),
@@ -146,7 +170,9 @@ describe("buildOperationBreakdownResponse", () => {
   });
 
   it("reports every type when there are six or fewer, with no other row", () => {
-    seed([sample({ payment: 5, create_account: 3 }, "2026-09-03T12:00:00.000Z")]);
+    seed([
+      sample({ payment: 5, create_account: 3 }, "2026-09-03T12:00:00.000Z"),
+    ]);
 
     const res = buildOperationBreakdownResponse("mainnet");
 
@@ -174,12 +200,16 @@ describe("buildOperationBreakdownResponse", () => {
   });
 
   it("computes each row's share of the total", () => {
-    seed([sample({ payment: 3, create_account: 1 }, "2026-09-03T12:00:00.000Z")]);
+    seed([
+      sample({ payment: 3, create_account: 1 }, "2026-09-03T12:00:00.000Z"),
+    ]);
 
     const res = buildOperationBreakdownResponse("mainnet");
 
     expect(res.breakdown.find((b) => b.type === "payment")?.share).toBe(0.75);
-    expect(res.breakdown.find((b) => b.type === "create_account")?.share).toBe(0.25);
+    expect(res.breakdown.find((b) => b.type === "create_account")?.share).toBe(
+      0.25,
+    );
   });
 
   it("reports the window span once there are two samples", () => {
@@ -227,13 +257,20 @@ describe("buildOperationBreakdownResponse", () => {
   });
 
   it("shares sum to roughly one when there is data", () => {
-    seed([sample({ a: 7, b: 11, c: 13, d: 17, e: 19, f: 23, g: 29 }, "2026-09-03T12:00:00.000Z")]);
+    seed([
+      sample(
+        { a: 7, b: 11, c: 13, d: 17, e: 19, f: 23, g: 29 },
+        "2026-09-03T12:00:00.000Z",
+      ),
+    ]);
 
     const res = buildOperationBreakdownResponse("mainnet");
     const summed = res.breakdown.reduce((acc, b) => acc + b.share, 0);
 
     expect(summed).toBeCloseTo(1, 3);
     // And the counts still account for every operation, grouping included.
-    expect(res.breakdown.reduce((acc, b) => acc + b.count, 0)).toBe(res.totalOperations);
+    expect(res.breakdown.reduce((acc, b) => acc + b.count, 0)).toBe(
+      res.totalOperations,
+    );
   });
 });
