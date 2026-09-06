@@ -21,6 +21,16 @@ updates:
     labels:
       - dependencies
       - frontend
+    # react/react-dom and their @types must move as one unit: react-dom@N
+    # requires react@N, and @types/react-dom@N peer-depends on @types/react@^N.
+    # Split PRs are unbuildable by construction (npm ci fails with ERESOLVE).
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
 
   # Covers the third-party actions pinned in .github/workflows (checkout,
   # setup-node, gitleaks-action).
