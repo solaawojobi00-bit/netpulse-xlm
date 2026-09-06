@@ -546,16 +546,18 @@ export interface StreamingHandle {
 }
 
 /**
- * Prunes historical records older than the retention policy.
+ * Rolls each complete UTC day into daily_rollups and then prunes the raw
+ * records that have aged out.
  *
- * A prune failure is logged and swallowed: retention is housekeeping, and a
- * database that cannot be pruned is still a database that can serve reads and
- * accept writes. Taking the process down over it would turn a growing file
- * into an outage.
+ * A failure is logged and swallowed: retention is housekeeping, and a database
+ * that cannot be pruned is still a database that can serve reads and accept
+ * writes. Taking the process down over it would turn a growing file into an
+ * outage. The rollup and the delete share one transaction, so a failure here
+ * leaves neither applied — the next run simply repeats the work.
  */
 function pruneWithLogging(): void {
   try {
-    db.pruneOlderThan();
+    db.rollupAndPrune();
   } catch (err) {
     logger.error("Prune failed", { component: "db", err });
   }

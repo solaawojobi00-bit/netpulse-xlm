@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NetPulseDatabase, floorToUtcMidnight } from "./db.js";
+import { NetPulseDatabase, db as dbFacade, floorToUtcMidnight } from "./db.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 describe("NetPulseDatabase Unit Tests", () => {
@@ -231,6 +231,320 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       // And it is the set we expect, not three identically wrong answers.
       expect(justAfterMidnight).toEqual([dayAt(7), dayAt(6), dayAt(0)]);
+    });
+  });
+
+  describe("rollupAndPrune", () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    /** 2026-09-11T14:00:00Z. Far enough in that a 7-day window has whole days. */
+    const NOW = Date.UTC(2026, 8, 11, 14, 0, 0);
+
+    /** An instant on the UTC day `daysAgo` before today, at `hours` into it. */
+    const at = (daysAgo: number, hours = 12, minutes = 0): string =>
+      new Date(
+        Date.UTC(2026, 8, 11) -
+          daysAgo * DAY_MS +
+          hours * 60 * 60 * 1000 +
+          minutes * 60 * 1000,
+      ).toISOString();
+
+    /** The YYYY-MM-DD label for the UTC day `daysAgo` before today. */
+    const dateOf = (daysAgo: number): string =>
+      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS).toISOString().slice(0, 10);
+
+    interface RollupRow {
+      network: string;
+      date: string;
+      avg_close_time_seconds: number | null;
+      avg_congestion_usage: number | null;
+      max_congestion_usage: number | null;
+      total_operations: number;
+      total_successful_tx: number;
+      total_failed_tx: number;
+      avg_fee_p50: number | null;
+      avg_fee_p90: number | null;
+    }
+
+    const rollups = (network = "mainnet"): RollupRow[] =>
+      (db as any).db
+        .prepare("SELECT * FROM daily_rollups WHERE network = ? ORDER BY date")
+        .all(network) as RollupRow[];
+
+    const rollupFor = (daysAgo: number, network = "mainnet"): RollupRow | undefined =>
+      rollups(network).find((r) => r.date === dateOf(daysAgo));
+
+    const rawLedgerCount = (): number =>
+      (db as any).db.prepare("SELECT COUNT(*) as c FROM ledgers").get().c;
+
+    const rawFeeCount = (): number =>
+      (db as any).db.prepare("SELECT COUNT(*) as c FROM fee_snapshots").get().c;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("aggregates a complete day correctly across both tables", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(1, 2), {
+          closeTimeSeconds: 4,
+          operationCount: 10,
+          successfulTransactionCount: 3,
+          failedTransactionCount: 1,
+        }),
+        createLedgerSample(2, at(1, 14), {
+          closeTimeSeconds: 6,
+          operationCount: 20,
+          successfulTransactionCount: 5,
+          failedTransactionCount: 2,
+        }),
+      ]);
+      db.insertFeeSnapshot(
+        "mainnet",
+        createFeeSnapshot(at(1, 3), {
+          ledgerCapacityUsage: 0.2,
+          feeChargedP50: 100,
+          feeChargedP90: 200,
+        }),
+      );
+      db.insertFeeSnapshot(
+        "mainnet",
+        createFeeSnapshot(at(1, 15), {
+          ledgerCapacityUsage: 0.6,
+          feeChargedP50: 140,
+          feeChargedP90: 300,
+        }),
+      );
+
+      db.rollupAndPrune();
+
+      const row = rollupFor(1);
+      expect(row).toBeDefined();
+      expect(row!.avg_close_time_seconds).toBe(5); // avg(4, 6)
+      expect(row!.avg_congestion_usage).toBeCloseTo(0.4, 10); // avg(0.2, 0.6)
+      expect(row!.max_congestion_usage).toBe(0.6); // max, not the average
+      expect(row!.total_operations).toBe(30);
+      expect(row!.total_successful_tx).toBe(8);
+      expect(row!.total_failed_tx).toBe(3);
+      expect(row!.avg_fee_p50).toBe(120); // avg(100, 140)
+      expect(row!.avg_fee_p90).toBe(250); // avg(200, 300)
+    });
+
+    it("is idempotent — a second run produces identical rows", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(2), { operationCount: 10 }),
+        createLedgerSample(2, at(1), { operationCount: 20 }),
+      ]);
+      db.insertFeeSnapshot("mainnet", createFeeSnapshot(at(1)));
+
+      db.rollupAndPrune();
+      const first = rollups();
+
+      db.rollupAndPrune();
+      const second = rollups();
+
+      expect(second).toEqual(first);
+    });
+
+    it("REPLACEs rather than duplicating when a still-present day gains ledgers", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(1, 2), { operationCount: 10 }),
+      ]);
+
+      db.rollupAndPrune();
+      expect(rollupFor(1)!.total_operations).toBe(10);
+
+      // A late-arriving ledger for the same day, still inside retention.
+      db.insertLedgers("mainnet", [
+        createLedgerSample(2, at(1, 20), { operationCount: 25 }),
+      ]);
+      db.rollupAndPrune();
+
+      const matching = rollups().filter((r) => r.date === dateOf(1));
+      expect(matching).toHaveLength(1);
+      expect(matching[0].total_operations).toBe(35);
+    });
+
+    it("leaves an already-pruned day's rollup untouched on later runs", () => {
+      // Day 9 is outside a 7-day retention window, so it is rolled up and
+      // deleted on the first run and must not be revisited afterwards.
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(9), { operationCount: 42 }),
+      ]);
+
+      db.rollupAndPrune();
+      const afterFirst = rollupFor(9);
+      expect(afterFirst!.total_operations).toBe(42);
+      expect(rawLedgerCount()).toBe(0);
+
+      db.rollupAndPrune();
+      db.rollupAndPrune();
+
+      expect(rollupFor(9)).toEqual(afterFirst);
+    });
+
+    it("never rolls up the in-progress UTC day", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(0, 1), { operationCount: 10 }),
+        createLedgerSample(2, at(0, 13), { operationCount: 20 }),
+      ]);
+      db.insertFeeSnapshot("mainnet", createFeeSnapshot(at(0, 2)));
+
+      db.rollupAndPrune();
+
+      expect(rollupFor(0)).toBeUndefined();
+      expect(rollups()).toHaveLength(0);
+      // ...and today's raw rows are still there to be rolled up tomorrow.
+      expect(rawLedgerCount()).toBe(2);
+    });
+
+    it("rolls up every complete day in the window, not only the one aging out", () => {
+      /*
+       * Rolling up only the boundary day would leave a seven-day hole at the
+       * right edge of a 30d or 90d chart.
+       */
+      for (let daysAgo = 1; daysAgo <= 6; daysAgo++) {
+        db.insertLedgers("mainnet", [
+          createLedgerSample(daysAgo, at(daysAgo), { operationCount: daysAgo }),
+        ]);
+      }
+
+      db.rollupAndPrune();
+
+      expect(rollups()).toHaveLength(6);
+      for (let daysAgo = 1; daysAgo <= 6; daysAgo++) {
+        expect(rollupFor(daysAgo)!.total_operations).toBe(daysAgo);
+      }
+      // All six are inside retention, so none of the raw rows are gone.
+      expect(rawLedgerCount()).toBe(6);
+    });
+
+    it("keeps mainnet and testnet separate for the same date", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(1), { operationCount: 10 }),
+      ]);
+      db.insertLedgers("testnet", [
+        createLedgerSample(1, at(1), { operationCount: 99 }),
+      ]);
+
+      db.rollupAndPrune();
+
+      expect(rollupFor(1, "mainnet")!.total_operations).toBe(10);
+      expect(rollupFor(1, "testnet")!.total_operations).toBe(99);
+    });
+
+    it("writes null fee columns for a day with ledgers but no fee snapshots", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(1), {
+          operationCount: 15,
+          successfulTransactionCount: 4,
+          failedTransactionCount: 1,
+        }),
+      ]);
+
+      db.rollupAndPrune();
+
+      const row = rollupFor(1)!;
+      expect(row.avg_congestion_usage).toBeNull();
+      expect(row.max_congestion_usage).toBeNull();
+      expect(row.avg_fee_p50).toBeNull();
+      expect(row.avg_fee_p90).toBeNull();
+      // The ledger side is intact — one missing source does not discard both.
+      expect(row.total_operations).toBe(15);
+      expect(row.total_successful_tx).toBe(4);
+      expect(row.total_failed_tx).toBe(1);
+    });
+
+    it("writes zero counts and a null close time for a day with fee snapshots but no ledgers", () => {
+      db.insertFeeSnapshot(
+        "mainnet",
+        createFeeSnapshot(at(1), { ledgerCapacityUsage: 0.3, feeChargedP50: 111 }),
+      );
+
+      db.rollupAndPrune();
+
+      const row = rollupFor(1)!;
+      expect(row.avg_close_time_seconds).toBeNull();
+      expect(row.total_operations).toBe(0);
+      expect(row.total_successful_tx).toBe(0);
+      expect(row.total_failed_tx).toBe(0);
+      expect(row.avg_congestion_usage).toBeCloseTo(0.3, 10);
+      expect(row.avg_fee_p50).toBe(111);
+    });
+
+    it("rolls a day up before deleting it", () => {
+      // Day 9 is outside retention. Its raw rows go; its summary must not.
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(9), { operationCount: 77 }),
+      ]);
+      db.insertFeeSnapshot("mainnet", createFeeSnapshot(at(9)));
+
+      db.rollupAndPrune();
+
+      expect(rawLedgerCount()).toBe(0);
+      expect(rawFeeCount()).toBe(0);
+      expect(rollupFor(9)!.total_operations).toBe(77);
+    });
+
+    it("persists neither the rollup nor the deletion when the transaction throws", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(9), { operationCount: 77 }),
+      ]);
+
+      const failure = new Error("disk error mid-transaction");
+      const spy = vi
+        .spyOn(db as any, "deleteRawBefore")
+        .mockImplementation(() => {
+          throw failure;
+        });
+
+      expect(() => db.rollupAndPrune()).toThrow(failure);
+
+      spy.mockRestore();
+
+      /*
+       * The rollup INSERT ran before the throw. If the two were not in one
+       * transaction it would have been committed, and the next run would then
+       * roll the surviving raw rows up a second time.
+       */
+      expect(rollups()).toHaveLength(0);
+      expect(rawLedgerCount()).toBe(1);
+    });
+
+    it("does not double-count after a failed run is retried", () => {
+      db.insertLedgers("mainnet", [
+        createLedgerSample(1, at(9), { operationCount: 77 }),
+      ]);
+
+      const spy = vi
+        .spyOn(db as any, "deleteRawBefore")
+        .mockImplementation(() => {
+          throw new Error("disk error mid-transaction");
+        });
+      expect(() => db.rollupAndPrune()).toThrow();
+      spy.mockRestore();
+
+      db.rollupAndPrune();
+
+      expect(rollupFor(9)!.total_operations).toBe(77);
+      expect(rawLedgerCount()).toBe(0);
+    });
+  });
+
+  describe("db facade", () => {
+    it("does not expose pruneOlderThan", () => {
+      /*
+       * Deleting raw rows without summarising them first is a one-way door.
+       * The primitive stays on the class for tests; the only entry point
+       * reachable from production code is the safe one.
+       */
+      expect((dbFacade as Record<string, unknown>).pruneOlderThan).toBeUndefined();
+      expect(typeof dbFacade.rollupAndPrune).toBe("function");
     });
   });
 

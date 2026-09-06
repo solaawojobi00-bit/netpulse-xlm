@@ -98,6 +98,31 @@ alongside the in-memory window rather than replacing it:
   double-counting.
 - WAL journal mode, so the read path for history never blocks ingestion.
 
+**Two retention tiers.** Raw ledgers and fee snapshots are kept for 7-8 whole
+UTC days as above. Before a day is deleted it is summarised into a
+`daily_rollups` table that is **kept indefinitely** — roughly 365 rows per year
+per network — so daily-grain history survives the raw data it was computed
+from.
+
+- The rollup and the delete run in **one transaction** (`rollupAndPrune`), and
+  the rollup happens first. Two separate units would let a crash between them
+  leave either a rolled-up day whose raw rows survive, which the next run would
+  count twice, or deleted rows with no rollup, which is a permanent gap.
+- Each run summarises **every complete UTC day still present in raw**, not only
+  the day aging out. Rolling up just the boundary day would leave a seven-day
+  hole at the right edge of a 30d or 90d chart. Recomputing days 1-7 is a
+  grouped index scan a few times a day, and `INSERT OR REPLACE` on
+  `(network, date)` makes it self-correcting for ledgers that arrive late.
+- The day list comes from the raw rows themselves, excluding the in-progress
+  UTC day. This is what makes the rollup idempotent, and it depends on the
+  whole-day cutoff above: a day still present in raw is always complete, so
+  recomputing it is exact, and a day already pruned has no raw rows and is
+  never revisited. There is no state in which a partial day is rolled up.
+- `pruneOlderThan` remains as the raw-delete primitive but is deliberately not
+  exposed on the `db` facade — deleting a day without summarising it first is a
+  one-way door, so the only entry point reachable from production code is the
+  safe one.
+
 **Still no auth and no user-specific data** — deliberately, per the PRD
 out-of-scope list. The database holds public network measurements only;
 losing it costs history, not correctness.
@@ -115,7 +140,8 @@ Public Horizon (horizon.stellar.org / horizon-testnet.stellar.org)
 Backend ingestion (persistent SSE stream + ~6s interval for the polled endpoints)
         │  - normalizes into internal types (LedgerSample, FeeSnapshot, SorobanSample)
         │  - appends to a capped in-memory rolling window, per network
-        │  - writes ledgers + fee snapshots to SQLite (7-8 whole UTC days)
+        │  - writes ledgers + fee snapshots to SQLite (7-8 whole UTC days),
+        │    rolled up into daily_rollups (kept indefinitely) before deletion
         │  - reconnects with exponential backoff (1s → 30s cap), resuming
         │    from its last paging token — see the SSE section above;
         │    a fresh start streams from "now", so resumption is not
