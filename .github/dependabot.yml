@@ -51,6 +51,19 @@ updates:
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # Same treatment for React majors. Grouping made the 18 -> 19 update
+      # resolvable (#141 installs cleanly) but not mergeable: React 19's types
+      # drop the global JSX namespace, so the build fails with TS2503 until the
+      # source is migrated. Hold majors until that is scoped deliberately; the
+      # react group above stays active for grouped minor/patch updates.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
 
   # Covers the third-party actions pinned in .github/workflows (checkout,
   # setup-node, gitleaks-action).
