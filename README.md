@@ -184,6 +184,49 @@ aggregate" — the two are not distinguishable, which
 with the other bucket behaviours (gaps are omitted rather than zero-filled, and
 the oldest bucket is usually partial).
 
+## Trends Export
+
+`GET /api/trends` serves daily-grain history and accepts the same `format`
+parameter, following the same pattern:
+
+| Request | Response |
+|---|---|
+| `/api/trends` | `application/json`, rendered inline (what the dashboard fetches) |
+| `/api/trends?format=csv` | `text/csv` as a file download |
+| `/api/trends?format=json` | the same JSON body, as a file download |
+
+`network` and `range` apply unchanged, and ranges here are `30d`, `90d` and
+`1y` rather than the hourly ones history accepts:
+
+```bash
+curl -OJ "http://localhost:4000/api/trends?network=testnet&range=1y&format=csv"
+```
+
+Downloads are named `netpulse-trends-<network>-<range>.csv` (or `.json`), so a
+trends export never collides with a history export in the same folder.
+
+CSV has one row per **day**, with `network` and `range` repeated on every row:
+
+```
+network,range,date,closeTimeSeconds,congestionUsage,maxCongestionUsage,operations,successfulTransactions,failedTransactions,p50Fee,p90Fee
+mainnet,90d,2026-09-04,5.62,0.4213,0.9871,3427194,1044821,20713,137,9042
+mainnet,90d,2026-09-05,,,,12,3,0,,
+```
+
+Two differences from the history export worth knowing before you load one into
+a spreadsheet:
+
+- **Successful and failed transactions are separate columns**, where history has
+  a single `transactions` column holding their sum. Add the two to compare.
+- **An empty field means no data, not a zero.** Unlike history, a genuine zero
+  is written as `0`. The second row above is a day with ledgers but no fee
+  snapshots.
+
+Days the backend was not running are **absent** rather than zero-filled, so
+consecutive rows are not necessarily consecutive dates. See
+[docs/API.md](./docs/API.md#get-apitrends) for the full field reference and
+retention behaviour.
+
 ## Health and Liveness Probes
 
 - `GET /healthz`: Process liveness endpoint that returns `{"status": "ok"}` with HTTP 200 whenever the backend process is running and accepting HTTP requests. It performs no I/O, does not access the database, and does not depend on upstream Horizon connectivity. **Use `/healthz` for container orchestrator liveness checks.**

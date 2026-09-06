@@ -36,12 +36,13 @@ handler described under [Errors](#errors), including on a path that exists:
 `POST /api/health` is a `404`, not a `405`.
 
 **Content type.** Every route returns `application/json; charset=utf-8`, except
-`GET /api/history?format=csv` and error pages.
+`GET /api/history?format=csv`, `GET /api/trends?format=csv`, and error pages.
 
 **CORS.** Governed by `CORS_ORIGIN` (comma-separated, default
 `http://localhost:5173`; `*` disables checking). The same allowlist governs the
 WebSocket upgrade. No response headers are added to the CORS exposed-headers
-list, which matters for [history exports](#get-apihistory).
+list, which matters for [history](#get-apihistory) and
+[trends](#get-apitrends) exports.
 
 ### The `network` query parameter
 
@@ -490,7 +491,7 @@ Daily-grain history from SQLite, for ranges longer than `/api/history` can
 serve. Backed by the `daily_rollups` table, which is written before raw rows
 are pruned and **kept indefinitely**.
 
-**Query parameters:** `network`, `range`.
+**Query parameters:** `network`, `range`, `format`.
 
 ### The `range` parameter
 
@@ -595,6 +596,49 @@ few. There is no backfill from Horizon.
 Today's date only appears once the day is complete. The in-progress UTC day is
 never rolled up — a partial day would be indistinguishable from a whole one
 afterwards — so the newest point is normally yesterday.
+
+### Export formats
+
+Identical in shape to [history's](#export-formats). `format` turns the same
+resource into a download; `network` and `range` apply unchanged.
+
+| Request | Status | `Content-Type` | `Content-Disposition` |
+| --- | --- | --- | --- |
+| `?format=csv` | 200 | `text/csv; charset=utf-8` | `attachment; filename="netpulse-trends-<network>-<range>.csv"` |
+| `?format=json` | 200 | `application/json; charset=utf-8` | `attachment; filename="netpulse-trends-<network>-<range>.json"` |
+| *omitted* | 200 | `application/json; charset=utf-8` | *absent* |
+| any other value | 200 | `application/json; charset=utf-8` | *absent* |
+
+An unrecognised `format` is **not** an error; it returns the ordinary inline
+JSON. `format=json` returns a body byte-identical to the inline response and
+differs only by the header. The filename says `trends`, so a trends export
+never collides with a history export of the same network and range.
+
+```bash
+curl -OJ "http://localhost:4000/api/trends?network=testnet&range=1y&format=csv"
+```
+
+**CSV details.** One row per day, with a header row. `network` and `range` are
+denormalised onto every row so a saved file stands alone. Rows are terminated
+with CRLF **including the final row**, per RFC 4180. Nulls are written as empty
+fields, not the text `null`:
+
+```
+network,range,date,closeTimeSeconds,congestionUsage,maxCongestionUsage,operations,successfulTransactions,failedTransactions,p50Fee,p90Fee
+mainnet,90d,2026-09-04,5.62,0.4213,0.9871,3427194,1044821,20713,137,9042
+mainnet,90d,2026-09-05,,,,12,3,0,,
+```
+
+The second row is a day with ledgers but no fee snapshots. Note that its
+`failedTransactions` is `0` rather than empty — unlike the history export, an
+empty field here means **no data**, never a zero aggregate.
+
+**Columns differ from the history export in two ways**, both following the JSON:
+`date` replaces `timestamp`, and `successfulTransactions` / `failedTransactions`
+are separate columns where history has a single summed `transactions`.
+
+**Cross-origin browser clients cannot read the filename**, for the same reason
+as [history exports](#export-formats).
 
 ## `GET /api/soroban`
 
