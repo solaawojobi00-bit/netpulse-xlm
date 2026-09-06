@@ -170,3 +170,52 @@ PR that has fallen behind needs updating before it can merge:
 ```bash
 gh pr update-branch <number>
 ```
+
+---
+
+## Cutting a Release
+
+Releases are not automatic. Merging to `main` publishes nothing on its own —
+most merges here are dependency bumps, docs corrections and CI tweaks, and
+versioning all of them would produce a history in which almost nothing is a
+release.
+
+To cut one, put the literal string `[release]` in the commit message that lands
+on `main`. Pull requests are squash-merged, so in practice that means the PR
+title:
+
+```text
+feat(backend): add per-node latency percentiles [release]
+```
+
+`.github/workflows/release.yml` then runs semantic-release, which tags the
+commit and publishes a GitHub Release with generated notes. A merge without the
+marker skips the job entirely.
+
+The marker is a plain substring, not a conventional-commit rule — there is no
+commitlint in this repository. Conventional commits still decide how large the
+bump is, because that is what semantic-release reads to tell a `fix` from a
+`feat` from a breaking change, but nothing enforces the format; a commit that
+does not follow it contributes no bump rather than failing the build.
+
+### Why the configuration looks the way it does
+
+`.releaserc.json` sits at the repo root and describes **one** release stream
+covering both packages, rather than a config per workspace. `backend/` and
+`frontend/` are independent installs with separate lockfiles, but both are
+`private` and neither is published; they ship as one product, and nothing
+consumes one at a different version from the other. Releasing them separately
+would need the third-party `semantic-release-monorepo` plugin — semantic-release
+cannot filter by path on its own — and would produce two tag namespaces for a
+thing that ships as a unit.
+
+For the same reason the plugin list omits `@semantic-release/npm`: there is no
+root `package.json` for it to read, and both packages are private.
+
+Release notes live on the GitHub Release rather than in a committed
+`CHANGELOG.md`. Branch protection on `main` requires pull requests and status
+checks, and the workflow's `GITHUB_TOKEN` acts as `github-actions[bot]`, which
+holds write permission but is not an admin and so cannot bypass those rules.
+`@semantic-release/changelog` and `@semantic-release/git` both push a commit
+back to `main`, so both would fail. Tagging is unaffected — protection rules
+apply to branches, and no tag protection rule is configured.

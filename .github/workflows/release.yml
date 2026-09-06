@@ -1,0 +1,93 @@
+name: Release
+
+# Cuts a tag and a GitHub Release with semantic-release.
+#
+# Deliberately not automatic on every merge. `main` takes routine traffic --
+# dependency bumps, docs corrections, CI tweaks -- and versioning all of it
+# produces a release history where almost nothing is a release. The job runs
+# only when the head commit message carries the literal string `[release]`,
+# which makes cutting a version a decision someone makes rather than a side
+# effect of merging.
+#
+# For a squash merge -- how pull requests land here -- the head commit message
+# is the squash message, so `[release]` goes in the PR title.
+#
+# The marker is a plain substring, not conventional-commit enforcement. There
+# is no commitlint in this repository and this workflow does not need one.
+# Conventional commits still decide the *size* of the bump, because that is
+# what semantic-release's commit-analyzer reads, but nothing here validates
+# them; a non-conforming commit contributes no bump rather than failing.
+
+on:
+  push:
+    branches: [main]
+
+# Least privilege by default. The release job below widens this for itself,
+# and it is the only job in the file.
+permissions:
+  contents: read
+
+concurrency:
+  # Two releases running at once would race for the same tag. Never cancel a
+  # run in progress: a half-published release leaves a tag with no GitHub
+  # Release attached, which has to be cleaned up by hand.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    # The gate. `github.event.head_commit.message` is the message of the commit
+    # that was actually pushed to main, so it reads the squash message rather
+    # than any of the individual commits from the branch.
+    if: contains(github.event.head_commit.message, '[release]')
+
+    # Job-level permissions *replace* the workflow default rather than merging
+    # with it, so `contents: write` has to be restated here even though the
+    # file-level block already mentions contents.
+    #
+    #   contents:      create the tag and the release
+    #   issues:        comment on issues closed by the release
+    #   pull-requests: comment on the pull requests included in it
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # semantic-release determines the last release by walking tags, and
+          # a shallow clone has none of them. Without this it treats every run
+          # as a first release.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # semantic-release 25 requires ^22.14.0 || >=24.10.0. Matches ci.yml.
+          node-version: 24
+
+      # Installed rather than run through `npx semantic-release`, which would
+      # resolve the version at run time and let a release be cut by whatever
+      # happened to be latest that morning. Pinned exactly for the same reason
+      # the secret scanner is pinned: this thing writes to the repository.
+      #
+      # One package covers it. commit-analyzer, release-notes-generator and
+      # github all ship inside semantic-release, and those are the only plugins
+      # .releaserc.json uses.
+      #
+      # There is no root package.json here -- backend/ and frontend/ install
+      # separately -- so this drops node_modules/ at the root. That path is
+      # already gitignored, and nothing in this workflow commits anything.
+      - name: Install semantic-release
+        run: npm install --no-save --no-package-lock semantic-release@25.0.9
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
