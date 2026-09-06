@@ -9,14 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * prune itself spied.
  */
 
-const mockPruneOlderThan = vi.fn();
+const mockRollupAndPrune = vi.fn();
 const mockConnectHorizonLedgerStream = vi.fn();
 const mockFetchRecentLedgers = vi.fn();
 const mockFetchFeeStats = vi.fn();
 const mockFetchRecentOperations = vi.fn();
 
 /*
- * Only pruneOlderThan is replaced. The inserts stay real — DEFAULT_DB_PATH is
+ * Only rollupAndPrune is replaced. The inserts stay real — DEFAULT_DB_PATH is
  * ":memory:" under NODE_ENV=test — so this suite exercises the scheduling
  * without also asserting against a stubbed database.
  */
@@ -26,7 +26,7 @@ vi.mock("./db.js", async () => {
     ...actual,
     db: {
       ...actual.db,
-      pruneOlderThan: (...args: any[]) => mockPruneOlderThan(...args),
+      rollupAndPrune: (...args: any[]) => mockRollupAndPrune(...args),
     },
   };
 });
@@ -80,7 +80,7 @@ describe("Retention scheduling", () => {
     vi.useFakeTimers();
     handles = [];
 
-    mockPruneOlderThan.mockReset();
+    mockRollupAndPrune.mockReset();
     mockFetchRecentLedgers.mockReset().mockResolvedValue([]);
     mockFetchFeeStats.mockReset().mockResolvedValue(null);
     mockFetchRecentOperations.mockReset().mockResolvedValue([]);
@@ -109,18 +109,18 @@ describe("Retention scheduling", () => {
   it("prunes once on startup", () => {
     start();
 
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(1);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(1);
   });
 
   it("prunes again after each interval elapses", () => {
     start();
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(1);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(1);
 
     advance(PRUNE_INTERVAL_MS);
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(2);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(2);
 
     advance(PRUNE_INTERVAL_MS);
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(3);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(3);
   });
 
   it("keeps pruning across a long-running process", () => {
@@ -129,7 +129,7 @@ describe("Retention scheduling", () => {
     // Four days at a six-hour period: the startup prune plus sixteen more.
     advance(4 * 24 * 60 * 60 * 1000);
 
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(17);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(17);
   });
 
   it("does not prune on the Horizon poll interval", () => {
@@ -141,19 +141,19 @@ describe("Retention scheduling", () => {
     expect(productionPollMs * 100).toBeLessThan(PRUNE_INTERVAL_MS);
     advance(productionPollMs * 100);
 
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(1);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(1);
   });
 
   it("stops pruning once stop() is called", async () => {
     const handle = start();
 
     advance(PRUNE_INTERVAL_MS);
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(2);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(2);
 
     await handle.stop();
     advance(PRUNE_INTERVAL_MS * 3);
 
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(2);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(2);
   });
 
   it("leaves no timer running after stop()", async () => {
@@ -167,7 +167,7 @@ describe("Retention scheduling", () => {
   it("logs a prune failure and keeps the schedule running", () => {
     const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
     const failure = new Error("database is locked");
-    mockPruneOlderThan.mockImplementationOnce(() => {
+    mockRollupAndPrune.mockImplementationOnce(() => {
       throw failure;
     });
 
@@ -180,6 +180,6 @@ describe("Retention scheduling", () => {
 
     // ...nor cancel the interval that was scheduled alongside it.
     advance(PRUNE_INTERVAL_MS);
-    expect(mockPruneOlderThan).toHaveBeenCalledTimes(2);
+    expect(mockRollupAndPrune).toHaveBeenCalledTimes(2);
   });
 });
