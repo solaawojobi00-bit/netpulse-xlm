@@ -25,7 +25,9 @@ describe("useQueryParam", () => {
   });
 
   it("falls back when the param is absent", () => {
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
     expect(result.current[0]).toBe("mainnet");
   });
 
@@ -51,7 +53,9 @@ describe("useQueryParam", () => {
   });
 
   it("writes a non-default value to the URL", () => {
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
 
     act(() => result.current[1]("testnet"));
 
@@ -61,7 +65,9 @@ describe("useQueryParam", () => {
 
   it("removes the param when the value returns to the default", () => {
     setUrl("?network=testnet");
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
 
     act(() => result.current[1]("mainnet"));
 
@@ -72,7 +78,9 @@ describe("useQueryParam", () => {
 
   it("leaves other params alone when writing", () => {
     setUrl("?range=6h&keep=this");
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
 
     act(() => result.current[1]("testnet"));
 
@@ -98,7 +106,9 @@ describe("useQueryParam", () => {
 
   it("replaces rather than pushes, so toggling does not pile up history", () => {
     const before = window.history.length;
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
 
     act(() => result.current[1]("testnet"));
     act(() => result.current[1]("mainnet"));
@@ -110,7 +120,9 @@ describe("useQueryParam", () => {
 
   it("preserves the path and hash", () => {
     window.history.replaceState(null, "", "/dashboard#charts");
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
 
     act(() => result.current[1]("testnet"));
 
@@ -120,7 +132,9 @@ describe("useQueryParam", () => {
   });
 
   it("re-reads the URL on popstate so the control matches the address bar", () => {
-    const { result } = renderHook(() => useQueryParam("network", NETWORKS, "mainnet"));
+    const { result } = renderHook(() =>
+      useQueryParam("network", NETWORKS, "mainnet"),
+    );
     expect(result.current[0]).toBe("mainnet");
 
     act(() => {

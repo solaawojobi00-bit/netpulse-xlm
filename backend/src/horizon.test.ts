@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   connectHorizonLedgerStream,
   fetchFeeStats,
   fetchRecentLedgers,
-  fetchRecentOperations,
   HorizonFeeStatsResponseSchema,
   HorizonLedgerRecordSchema,
-  HorizonLedgersResponseSchema,
   HorizonOperationRecordSchema,
   numericCoerce,
   recordToSample,
@@ -97,9 +95,12 @@ describe("Horizon Unit Tests", () => {
         json: async () => ({
           _embedded: { records: mockRecords },
         }),
-      } as Response);
+      });
 
-      const samples = await fetchRecentLedgers(3, "https://horizon-test.example.com");
+      const samples = await fetchRecentLedgers(
+        3,
+        "https://horizon-test.example.com",
+      );
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         "https://horizon-test.example.com/ledgers?order=desc&limit=3",
@@ -133,7 +134,7 @@ describe("Horizon Unit Tests", () => {
             p99: "1000",
           },
         }),
-      } as Response);
+      });
 
       const feeStats = await fetchFeeStats("https://horizon-test.example.com");
 
@@ -159,11 +160,13 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 503,
-      } as Response);
+      });
 
       await expect(
         fetchRecentLedgers(5, "https://horizon-test.example.com"),
-      ).rejects.toThrow("Horizon request failed: /ledgers?order=desc&limit=5 -> 503");
+      ).rejects.toThrow(
+        "Horizon request failed: /ledgers?order=desc&limit=5 -> 503",
+      );
     });
   });
 
@@ -196,10 +199,14 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([ssePayload]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
-      await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
+      await connectHorizonLedgerStream(
+        "https://horizon-test.example.com",
+        "now",
+        onLedger,
+      );
 
       expect(onLedger).toHaveBeenCalledTimes(1);
       expect(onLedger).toHaveBeenCalledWith(validRecord);
@@ -214,10 +221,14 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([chunk1, chunk2]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
-      await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
+      await connectHorizonLedgerStream(
+        "https://horizon-test.example.com",
+        "now",
+        onLedger,
+      );
 
       expect(onLedger).toHaveBeenCalledTimes(1);
       expect(onLedger).toHaveBeenCalledWith(validRecord);
@@ -234,11 +245,15 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream(streamData),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
       await expect(
-        connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger),
+        connectHorizonLedgerStream(
+          "https://horizon-test.example.com",
+          "now",
+          onLedger,
+        ),
       ).resolves.toBeUndefined();
 
       expect(onLedger).toHaveBeenCalledTimes(1);
@@ -260,10 +275,14 @@ describe("Horizon Unit Tests", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         body: createMockStream([ssePayload]),
-      } as Response);
+      });
 
       const onLedger = vi.fn();
-      await connectHorizonLedgerStream("https://horizon-test.example.com", "now", onLedger);
+      await connectHorizonLedgerStream(
+        "https://horizon-test.example.com",
+        "now",
+        onLedger,
+      );
 
       expect(onLedger).not.toHaveBeenCalled();
     });
@@ -273,11 +292,17 @@ describe("Horizon Unit Tests", () => {
         ok: false,
         status: 502,
         body: null,
-      } as Response);
+      });
 
       await expect(
-        connectHorizonLedgerStream("https://horizon-test.example.com", "now", vi.fn()),
-      ).rejects.toThrow("Horizon SSE stream failed: https://horizon-test.example.com/ledgers?cursor=now&order=asc -> 502");
+        connectHorizonLedgerStream(
+          "https://horizon-test.example.com",
+          "now",
+          vi.fn(),
+        ),
+      ).rejects.toThrow(
+        "Horizon SSE stream failed: https://horizon-test.example.com/ledgers?cursor=now&order=asc -> 502",
+      );
     });
   });
 
@@ -313,7 +338,10 @@ describe("Horizon Unit Tests", () => {
         expect(result.sequence).toBe(12345);
 
         expect(() =>
-          HorizonLedgerRecordSchema.parse({ ...valid, sequence: "not-a-number" }),
+          HorizonLedgerRecordSchema.parse({
+            ...valid,
+            sequence: "not-a-number",
+          }),
         ).toThrow();
       });
 
@@ -344,7 +372,9 @@ describe("Horizon Unit Tests", () => {
             p99: "500",
           },
         };
-        expect(() => HorizonFeeStatsResponseSchema.parse(missingField)).toThrow();
+        expect(() =>
+          HorizonFeeStatsResponseSchema.parse(missingField),
+        ).toThrow();
       });
 
       it("validates HorizonOperationRecordSchema", () => {
@@ -356,8 +386,15 @@ describe("Horizon Unit Tests", () => {
           created_at: "2026-09-02T12:00:00Z",
         };
 
-        expect(HorizonOperationRecordSchema.parse(valid).type).toBe("invoke_host_function");
-        expect(() => HorizonOperationRecordSchema.parse({ ...valid, transaction_successful: "true" })).toThrow();
+        expect(HorizonOperationRecordSchema.parse(valid).type).toBe(
+          "invoke_host_function",
+        );
+        expect(() =>
+          HorizonOperationRecordSchema.parse({
+            ...valid,
+            transaction_successful: "true",
+          }),
+        ).toThrow();
       });
     });
 
@@ -374,7 +411,7 @@ describe("Horizon Unit Tests", () => {
               p99: "500",
             },
           }),
-        } as Response);
+        });
 
         await expect(fetchFeeStats("https://horizon.test")).rejects.toThrow(
           /Horizon schema validation failed for \/fee_stats: fee_charged\.p50/,
@@ -394,9 +431,11 @@ describe("Horizon Unit Tests", () => {
               ],
             },
           }),
-        } as Response);
+        });
 
-        await expect(fetchRecentLedgers(5, "https://horizon.test")).rejects.toThrow(
+        await expect(
+          fetchRecentLedgers(5, "https://horizon.test"),
+        ).rejects.toThrow(
           /Horizon schema validation failed for \/ledgers\?order=desc&limit=5/,
         );
       });

@@ -2,7 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-function Boom({ message = "chart exploded" }: { message?: string }): JSX.Element {
+function Boom({
+  message = "chart exploded",
+}: {
+  message?: string;
+}): JSX.Element {
   throw new Error(message);
 }
 
@@ -42,8 +46,12 @@ describe("ErrorBoundary", () => {
     expect(
       screen.getByText(/something went wrong displaying this data/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /reload page/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try again/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /reload page/i }),
+    ).toBeInTheDocument();
   });
 
   it("surfaces the underlying error message in the fallback", () => {

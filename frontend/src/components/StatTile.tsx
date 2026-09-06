@@ -119,7 +119,9 @@ export function StatTile({
                 {band}
               </span>
             )}
-            {sublabel && <span className="stat-tile__sublabel">{sublabel}</span>}
+            {sublabel && (
+              <span className="stat-tile__sublabel">{sublabel}</span>
+            )}
           </>
         )}
         {/*
@@ -129,7 +131,10 @@ export function StatTile({
           reintroduce the defect one line below the fix.
         */}
         {loading && (
-          <span className="stat-tile__skeleton stat-tile__skeleton--sub" aria-hidden="true" />
+          <span
+            className="stat-tile__skeleton stat-tile__skeleton--sub"
+            aria-hidden="true"
+          />
         )}
       </div>
     </div>

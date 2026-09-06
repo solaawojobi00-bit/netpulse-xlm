@@ -18,7 +18,8 @@ function stubPrefersLight(matches: boolean) {
     vi.fn((query: string) => ({
       matches: query.includes("prefers-color-scheme: light") ? matches : false,
       media: query,
-      addEventListener: (_: string, listener: Listener) => listeners.push(listener),
+      addEventListener: (_: string, listener: Listener) =>
+        listeners.push(listener),
       removeEventListener: (_: string, listener: Listener) => {
         const i = listeners.indexOf(listener);
         if (i >= 0) listeners.splice(i, 1);
@@ -96,12 +97,16 @@ describe("useTheme", () => {
 
   it("still renders when localStorage is unavailable", () => {
     stubPrefersLight(false);
-    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("storage blocked");
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("storage blocked");
+      });
 
     expect(() => render(<Probe />)).not.toThrow();
     expect(screen.getByRole("button")).toHaveTextContent("dark");

@@ -10,7 +10,13 @@ import {
 import type { HealthResponse } from "../api";
 import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { describeReadings } from "./chartSummary";
-import { axisStroke, axisTick, barTooltipCursor, chartA11y, tooltipProps } from "./chartTheme";
+import {
+  axisStroke,
+  axisTick,
+  barTooltipCursor,
+  chartA11y,
+  tooltipProps,
+} from "./chartTheme";
 
 interface Props {
   fees: HealthResponse["fees"] | null;

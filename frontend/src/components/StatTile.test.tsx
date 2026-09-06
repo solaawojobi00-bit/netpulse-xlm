@@ -16,13 +16,22 @@ describe("StatTile", () => {
      * with no role cannot take an accessible name, so that skeleton announced
      * nothing. Asserting the role is what makes the name real.
      */
-    expect(screen.getByRole("status")).toHaveAccessibleName("Base fee: loading");
+    expect(screen.getByRole("status")).toHaveAccessibleName(
+      "Base fee: loading",
+    );
     expect(screen.queryByText("100 stroops")).not.toBeInTheDocument();
     expect(container.querySelector(".stat-tile--loading")).toBeInTheDocument();
   });
 
   it("renders the congestion band as a chip with a non-colour glyph", () => {
-    render(<StatTile label="Network congestion" value="88%" band="high" tone="bad" />);
+    render(
+      <StatTile
+        label="Network congestion"
+        value="88%"
+        band="high"
+        tone="bad"
+      />,
+    );
 
     // The word carries the meaning; the glyph is a redundant shape cue so the
     // severity does not depend on the chip's colour.
@@ -32,7 +41,15 @@ describe("StatTile", () => {
   });
 
   it("hides the band while loading rather than showing a stale severity", () => {
-    render(<StatTile label="Network congestion" value={null} band="high" tone="bad" status="loading" />);
+    render(
+      <StatTile
+        label="Network congestion"
+        value={null}
+        band="high"
+        tone="bad"
+        status="loading"
+      />,
+    );
 
     expect(screen.queryByText("high")).not.toBeInTheDocument();
   });
@@ -44,7 +61,9 @@ describe("StatTile", () => {
 
     // The defect this replaces: an indefinite skeleton animation promising
     // data was about to arrive at exactly the moment it was not.
-    expect(container.querySelector(".stat-tile__skeleton")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(".stat-tile__skeleton"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
     expect(screen.queryByText("100 stroops")).not.toBeInTheDocument();
   });
@@ -77,11 +96,7 @@ describe("StatTile", () => {
 
   it("renders given value and optional sublabel", () => {
     render(
-      <StatTile
-        label="Ledger close time"
-        value="5.2s"
-        sublabel="avg 5.0s"
-      />,
+      <StatTile label="Ledger close time" value="5.2s" sublabel="avg 5.0s" />,
     );
 
     expect(screen.getByText("Ledger close time")).toBeInTheDocument();

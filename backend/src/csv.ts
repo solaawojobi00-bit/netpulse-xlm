@@ -63,7 +63,11 @@ export function buildCsv<const Columns extends readonly string[]>(
   const lines = [columns.join(",")];
 
   for (const row of rows) {
-    lines.push(columns.map((column) => formatCsvValue(row[column as Columns[number]])).join(","));
+    lines.push(
+      columns
+        .map((column) => formatCsvValue(row[column as Columns[number]]))
+        .join(","),
+    );
   }
 
   return lines.join("\r\n") + "\r\n";

@@ -32,13 +32,16 @@ vi.mock("./db.js", async () => {
 });
 
 vi.mock("./horizon.js", async () => {
-  const actual = await vi.importActual<typeof import("./horizon.js")>("./horizon.js");
+  const actual =
+    await vi.importActual<typeof import("./horizon.js")>("./horizon.js");
   return {
     ...actual,
     fetchRecentLedgers: (...args: any[]) => mockFetchRecentLedgers(...args),
     fetchFeeStats: (...args: any[]) => mockFetchFeeStats(...args),
-    fetchRecentOperations: (...args: any[]) => mockFetchRecentOperations(...args),
-    connectHorizonLedgerStream: (...args: any[]) => mockConnectHorizonLedgerStream(...args),
+    fetchRecentOperations: (...args: any[]) =>
+      mockFetchRecentOperations(...args),
+    connectHorizonLedgerStream: (...args: any[]) =>
+      mockConnectHorizonLedgerStream(...args),
   };
 });
 
@@ -91,7 +94,12 @@ describe("Retention scheduling", () => {
      * reconnect loop with no timer to gate it.
      */
     mockConnectHorizonLedgerStream.mockImplementation(
-      (_url: string, _cursor: string, _onRecord: unknown, signal?: AbortSignal) =>
+      (
+        _url: string,
+        _cursor: string,
+        _onRecord: unknown,
+        signal?: AbortSignal,
+      ) =>
         new Promise<void>((resolve) => {
           if (signal?.aborted) return resolve();
           signal?.addEventListener("abort", () => resolve());

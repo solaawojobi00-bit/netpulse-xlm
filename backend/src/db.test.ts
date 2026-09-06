@@ -56,7 +56,9 @@ describe("NetPulseDatabase Unit Tests", () => {
       expect(history.points[0].operations).toBe(15);
 
       // Re-insert same sequence with updated operation count
-      const sample1Updated = createLedgerSample(1001, now, { operationCount: 40 });
+      const sample1Updated = createLedgerSample(1001, now, {
+        operationCount: 40,
+      });
       db.insertLedgers("mainnet", [sample1Updated]);
 
       history = db.getHistory("mainnet");
@@ -65,7 +67,9 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       // Direct count verification on composite PK
       const count = (db as any).db
-        .prepare("SELECT COUNT(*) as c FROM ledgers WHERE network = ? AND sequence = ?")
+        .prepare(
+          "SELECT COUNT(*) as c FROM ledgers WHERE network = ? AND sequence = ?",
+        )
         .get("mainnet", 1001).c;
       expect(count).toBe(1);
     });
@@ -89,8 +93,13 @@ describe("NetPulseDatabase Unit Tests", () => {
   describe("network isolation", () => {
     it("ensures testnet rows are not returned in mainnet history query", () => {
       const now = new Date().toISOString();
-      db.insertLedgers("testnet", [createLedgerSample(500, now, { operationCount: 50 })]);
-      db.insertFeeSnapshot("testnet", createFeeSnapshot(now, { feeChargedP50: 300 }));
+      db.insertLedgers("testnet", [
+        createLedgerSample(500, now, { operationCount: 50 }),
+      ]);
+      db.insertFeeSnapshot(
+        "testnet",
+        createFeeSnapshot(now, { feeChargedP50: 300 }),
+      );
 
       const mainnetHistory = db.getHistory("mainnet");
       expect(mainnetHistory.points).toEqual([]);
@@ -116,24 +125,33 @@ describe("NetPulseDatabase Unit Tests", () => {
 
     /** An instant `days` before NOW's UTC midnight, offset within that day. */
     const dayAt = (daysAgo: number, hours = 12): string =>
-      new Date(Date.UTC(2026, 8, 4) - daysAgo * DAY_MS + hours * 60 * 60 * 1000).toISOString();
+      new Date(
+        Date.UTC(2026, 8, 4) - daysAgo * DAY_MS + hours * 60 * 60 * 1000,
+      ).toISOString();
 
     const seed = (times: string[]) => {
       db.insertLedgers(
         "mainnet",
         times.map((t, i) => createLedgerSample(i + 1, t)),
       );
-      for (const t of times) db.insertFeeSnapshot("mainnet", createFeeSnapshot(t));
+      for (const t of times)
+        db.insertFeeSnapshot("mainnet", createFeeSnapshot(t));
     };
 
     const remainingLedgerTimes = (): string[] =>
-      ((db as any).db
-        .prepare("SELECT closed_at FROM ledgers WHERE network = 'mainnet' ORDER BY closed_at_unix")
-        .all() as Array<{ closed_at: string }>).map((r) => r.closed_at);
+      (
+        (db as any).db
+          .prepare(
+            "SELECT closed_at FROM ledgers WHERE network = 'mainnet' ORDER BY closed_at_unix",
+          )
+          .all() as Array<{ closed_at: string }>
+      ).map((r) => r.closed_at);
 
     const remainingFeeCount = (): number =>
       (db as any).db
-        .prepare("SELECT COUNT(*) as c FROM fee_snapshots WHERE network = 'mainnet'")
+        .prepare(
+          "SELECT COUNT(*) as c FROM fee_snapshots WHERE network = 'mainnet'",
+        )
         .get().c;
 
     beforeEach(() => {
@@ -170,7 +188,10 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       db.pruneOlderThan(7 * DAY_MS);
 
-      expect(remainingLedgerTimes()).toEqual([boundaryMorning, boundaryEvening]);
+      expect(remainingLedgerTimes()).toEqual([
+        boundaryMorning,
+        boundaryEvening,
+      ]);
       expect(remainingFeeCount()).toBe(2);
     });
 
@@ -215,9 +236,11 @@ describe("NetPulseDatabase Unit Tests", () => {
           );
           vi.setSystemTime(Date.UTC(2026, 8, 4, hour, minute, 0));
           scratch.pruneOlderThan(7 * DAY_MS);
-          return ((scratch as any).db
-            .prepare("SELECT closed_at FROM ledgers ORDER BY closed_at_unix")
-            .all() as Array<{ closed_at: string }>).map((r) => r.closed_at);
+          return (
+            (scratch as any).db
+              .prepare("SELECT closed_at FROM ledgers ORDER BY closed_at_unix")
+              .all() as Array<{ closed_at: string }>
+          ).map((r) => r.closed_at);
         } finally {
           scratch.close();
         }
@@ -252,7 +275,9 @@ describe("NetPulseDatabase Unit Tests", () => {
 
     /** The YYYY-MM-DD label for the UTC day `daysAgo` before today. */
     const dateOf = (daysAgo: number): string =>
-      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS).toISOString().slice(0, 10);
+      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
 
     interface RollupRow {
       network: string;
@@ -273,7 +298,10 @@ describe("NetPulseDatabase Unit Tests", () => {
         .prepare("SELECT * FROM daily_rollups WHERE network = ? ORDER BY date")
         .all(network) as RollupRow[];
 
-    const rollupFor = (daysAgo: number, network = "mainnet"): RollupRow | undefined =>
+    const rollupFor = (
+      daysAgo: number,
+      network = "mainnet",
+    ): RollupRow | undefined =>
       rollups(network).find((r) => r.date === dateOf(daysAgo));
 
     const rawLedgerCount = (): number =>
@@ -465,7 +493,10 @@ describe("NetPulseDatabase Unit Tests", () => {
     it("writes zero counts and a null close time for a day with fee snapshots but no ledgers", () => {
       db.insertFeeSnapshot(
         "mainnet",
-        createFeeSnapshot(at(1), { ledgerCapacityUsage: 0.3, feeChargedP50: 111 }),
+        createFeeSnapshot(at(1), {
+          ledgerCapacityUsage: 0.3,
+          feeChargedP50: 111,
+        }),
       );
 
       db.rollupAndPrune();
@@ -613,7 +644,18 @@ describe("NetPulseDatabase Unit Tests", () => {
          * asserted rather than reviewed: the count the rollup recorded must
          * equal the count the TypeScript predicate accepts over the same input.
          */
-        const samples = [-36192909, -1, 0, 0.5, 4, 6, 8, Infinity, -Infinity, NaN];
+        const samples = [
+          -36192909,
+          -1,
+          0,
+          0.5,
+          4,
+          6,
+          8,
+          Infinity,
+          -Infinity,
+          NaN,
+        ];
 
         db.insertLedgers(
           "mainnet",
@@ -718,7 +760,9 @@ describe("NetPulseDatabase Unit Tests", () => {
 
     /** The YYYY-MM-DD label `daysAgo` before today. */
     const dateOf = (daysAgo: number): string =>
-      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS).toISOString().slice(0, 10);
+      new Date(Date.UTC(2026, 8, 11) - daysAgo * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -933,9 +977,11 @@ describe("NetPulseDatabase Unit Tests", () => {
         `);
 
         const columnNames = (): string[] =>
-          (raw.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
-            name: string;
-          }>).map((c) => c.name);
+          (
+            raw.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+              name: string;
+            }>
+          ).map((c) => c.name);
 
         expect(columnNames()).not.toContain("close_time_sample_count");
 
@@ -960,7 +1006,9 @@ describe("NetPulseDatabase Unit Tests", () => {
         ]);
         expect(() => scratch.rollupAndPrune()).not.toThrow();
         expect(
-          raw.prepare("SELECT close_time_sample_count c FROM daily_rollups").get().c,
+          raw
+            .prepare("SELECT close_time_sample_count c FROM daily_rollups")
+            .get().c,
         ).toBe(1);
       } finally {
         scratch.close();
@@ -974,7 +1022,9 @@ describe("NetPulseDatabase Unit Tests", () => {
         (scratch as any).initSchema();
 
         const matching = (
-          (scratch as any).db.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+          (scratch as any).db
+            .prepare("PRAGMA table_info(daily_rollups)")
+            .all() as Array<{
             name: string;
           }>
         ).filter((c) => c.name === "close_time_sample_count");
@@ -993,7 +1043,9 @@ describe("NetPulseDatabase Unit Tests", () => {
        * The primitive stays on the class for tests; the only entry point
        * reachable from production code is the safe one.
        */
-      expect((dbFacade as Record<string, unknown>).pruneOlderThan).toBeUndefined();
+      expect(
+        (dbFacade as Record<string, unknown>).pruneOlderThan,
+      ).toBeUndefined();
       expect(typeof dbFacade.rollupAndPrune).toBe("function");
     });
   });
@@ -1017,7 +1069,9 @@ describe("NetPulseDatabase Unit Tests", () => {
     });
 
     it("crosses month and year boundaries correctly", () => {
-      expect(floorToUtcMidnight(Date.UTC(2026, 0, 1, 0, 0, 0, 1))).toBe(Date.UTC(2026, 0, 1));
+      expect(floorToUtcMidnight(Date.UTC(2026, 0, 1, 0, 0, 0, 1))).toBe(
+        Date.UTC(2026, 0, 1),
+      );
       expect(floorToUtcMidnight(Date.UTC(2025, 11, 31, 23, 59, 59, 999))).toBe(
         Date.UTC(2025, 11, 31),
       );
@@ -1028,7 +1082,8 @@ describe("NetPulseDatabase Unit Tests", () => {
     it("collapses two ledgers in the same 5-minute bucket summing ops/txs and averaging closeTime", () => {
       const bucketResolutionMs = 5 * 60 * 1000;
       const now = Date.now();
-      const baseBucketUnix = Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
+      const baseBucketUnix =
+        Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
 
       const t1 = new Date(baseBucketUnix + 10 * 1000).toISOString();
       const t2 = new Date(baseBucketUnix + 60 * 1000).toISOString();
@@ -1061,7 +1116,8 @@ describe("NetPulseDatabase Unit Tests", () => {
     it("produces separate points for different 5-minute buckets ordered oldest-first", () => {
       const bucketResolutionMs = 5 * 60 * 1000;
       const now = Date.now();
-      const currentBucketUnix = Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
+      const currentBucketUnix =
+        Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
       const previousBucketUnix = currentBucketUnix - bucketResolutionMs;
 
       const tOld = new Date(previousBucketUnix + 30 * 1000).toISOString();
@@ -1074,23 +1130,31 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       const history = db.getHistory("mainnet", 24);
       expect(history.points).toHaveLength(2);
-      expect(history.points[0].timestamp).toBe(new Date(previousBucketUnix).toISOString());
+      expect(history.points[0].timestamp).toBe(
+        new Date(previousBucketUnix).toISOString(),
+      );
       expect(history.points[0].operations).toBe(10);
-      expect(history.points[1].timestamp).toBe(new Date(currentBucketUnix).toISOString());
+      expect(history.points[1].timestamp).toBe(
+        new Date(currentBucketUnix).toISOString(),
+      );
       expect(history.points[1].operations).toBe(30);
     });
 
     it("handles ledger-only and fee-only buckets in outer-join", () => {
       const bucketResolutionMs = 5 * 60 * 1000;
       const now = Date.now();
-      const bucket1Unix = Math.floor(now / bucketResolutionMs) * bucketResolutionMs - bucketResolutionMs;
+      const bucket1Unix =
+        Math.floor(now / bucketResolutionMs) * bucketResolutionMs -
+        bucketResolutionMs;
       const bucket2Unix = bucket1Unix + bucketResolutionMs;
 
       const tBucket1 = new Date(bucket1Unix + 15 * 1000).toISOString();
       const tBucket2 = new Date(bucket2Unix + 15 * 1000).toISOString();
 
       // Bucket 1: Ledger only
-      db.insertLedgers("mainnet", [createLedgerSample(30, tBucket1, { operationCount: 20 })]);
+      db.insertLedgers("mainnet", [
+        createLedgerSample(30, tBucket1, { operationCount: 20 }),
+      ]);
 
       // Bucket 2: Fee only
       db.insertFeeSnapshot(
@@ -1106,14 +1170,18 @@ describe("NetPulseDatabase Unit Tests", () => {
       expect(history.points).toHaveLength(2);
 
       // Bucket 1 (ledger only): fee fields are null
-      expect(history.points[0].timestamp).toBe(new Date(bucket1Unix).toISOString());
+      expect(history.points[0].timestamp).toBe(
+        new Date(bucket1Unix).toISOString(),
+      );
       expect(history.points[0].operations).toBe(20);
       expect(history.points[0].congestionUsage).toBeNull();
       expect(history.points[0].p50Fee).toBeNull();
       expect(history.points[0].p90Fee).toBeNull();
 
       // Bucket 2 (fee only): operations and transactions are 0, closeTimeSeconds is null
-      expect(history.points[1].timestamp).toBe(new Date(bucket2Unix).toISOString());
+      expect(history.points[1].timestamp).toBe(
+        new Date(bucket2Unix).toISOString(),
+      );
       expect(history.points[1].operations).toBe(0);
       expect(history.points[1].transactions).toBe(0);
       expect(history.points[1].closeTimeSeconds).toBeNull();
@@ -1140,7 +1208,8 @@ describe("NetPulseDatabase Unit Tests", () => {
     it("rounds closeTimeSeconds to 2dp, congestionUsage to 4dp, and fees to whole numbers", () => {
       const bucketResolutionMs = 5 * 60 * 1000;
       const now = Date.now();
-      const bucketUnix = Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
+      const bucketUnix =
+        Math.floor(now / bucketResolutionMs) * bucketResolutionMs;
       const t = new Date(bucketUnix + 10 * 1000).toISOString();
 
       db.insertLedgers("mainnet", [

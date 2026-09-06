@@ -28,12 +28,17 @@ describe("OperationTypeChart", () => {
   it("labels the figure as a sample over a window, not a total", () => {
     render(
       <OperationTypeChart
-        breakdown={breakdown([{ type: "payment", count: 90 }, { type: "change_trust", count: 10 }])}
+        breakdown={breakdown([
+          { type: "payment", count: 90 },
+          { type: "change_trust", count: 10 },
+        ])}
       />,
     );
 
     // "100 operations" alone invites being read as per-ledger or all-time.
-    expect(screen.getByText(/100 operations sampled over the last 2m/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/100 operations sampled over the last 2m/),
+    ).toBeInTheDocument();
   });
 
   it("names each type in the chart's accessible description with its share", () => {
@@ -65,7 +70,9 @@ describe("OperationTypeChart", () => {
       />,
     );
 
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("Other types 10");
+    expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
+      "Other types 10",
+    );
   });
 
   it("renders a type it has never heard of readably", () => {
@@ -80,9 +87,13 @@ describe("OperationTypeChart", () => {
   });
 
   it("says a quiet window is quiet instead of drawing an empty axis", () => {
-    render(<OperationTypeChart breakdown={breakdown([], { distinctTypes: 0 })} />);
+    render(
+      <OperationTypeChart breakdown={breakdown([], { distinctTypes: 0 })} />,
+    );
 
-    expect(screen.getByText("No operations in the recent sample window.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No operations in the recent sample window."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
@@ -98,7 +109,9 @@ describe("OperationTypeChart", () => {
   it("reports a cold-start failure rather than looking empty", () => {
     render(<OperationTypeChart breakdown={null} error="backend unreachable" />);
 
-    expect(screen.getByText("Could not load the operation breakdown.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Could not load the operation breakdown."),
+    ).toBeInTheDocument();
   });
 
   it("keeps showing a breakdown that already arrived when a refresh fails", () => {

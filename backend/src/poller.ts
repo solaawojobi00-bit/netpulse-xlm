@@ -77,7 +77,10 @@ export function countOperationTypes(
   for (const op of operations) {
     // A record whose type is missing or non-string still happened, so it is
     // counted — as `other` rather than as a key like "undefined".
-    const type = typeof op?.type === "string" && op.type.length > 0 ? op.type : OTHER_OPERATION_TYPE;
+    const type =
+      typeof op?.type === "string" && op.type.length > 0
+        ? op.type
+        : OTHER_OPERATION_TYPE;
     counts[type] = (counts[type] ?? 0) + 1;
     total += 1;
   }
@@ -86,7 +89,9 @@ export function countOperationTypes(
   if (keys.length > MAX_TRACKED_TYPES) {
     // Keep the largest types by count; everything else becomes `other`. Ties
     // break on the type name so the result does not depend on key order.
-    const ranked = keys.sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+    const ranked = keys.sort(
+      (a, b) => counts[b] - counts[a] || a.localeCompare(b),
+    );
     const kept = ranked.slice(0, MAX_TRACKED_TYPES - 1);
     const dropped = ranked.slice(MAX_TRACKED_TYPES - 1);
 
@@ -146,7 +151,10 @@ export class RollingStore {
       this.feeSnapshots.shift();
     }
 
-    void evaluateCongestionAlert(this.network, snapshot.ledgerCapacityUsage).catch((err) => {
+    void evaluateCongestionAlert(
+      this.network,
+      snapshot.ledgerCapacityUsage,
+    ).catch((err) => {
       logger.warn("Congestion alert evaluation failed", {
         component: "alerts",
         network: this.network,
@@ -244,7 +252,10 @@ function notifyUpdate(network: Network): void {
     try {
       listener(network);
     } catch (err) {
-      logger.error("Error in store update listener", { component: "poller", err });
+      logger.error("Error in store update listener", {
+        component: "poller",
+        err,
+      });
     }
   }
 }
@@ -273,8 +284,12 @@ export async function pollOperations(network: Network): Promise<void> {
   try {
     const rawOps = await fetchRecentOperations(100, url);
     const operations = Array.isArray(rawOps) ? rawOps : [];
-    const sorobanOps = operations.filter((op) => op.type === "invoke_host_function");
-    const successfulCount = sorobanOps.filter((op) => op.transaction_successful).length;
+    const sorobanOps = operations.filter(
+      (op) => op.type === "invoke_host_function",
+    );
+    const successfulCount = sorobanOps.filter(
+      (op) => op.transaction_successful,
+    ).length;
     const failedCount = sorobanOps.length - successfulCount;
 
     const sample: SorobanSample = {
@@ -291,8 +306,11 @@ export async function pollOperations(network: Network): Promise<void> {
     currentStore.markSuccess();
     notifyUpdate(network);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn("Operations poll failed", { component: "poller", network, err });
+    logger.warn("Operations poll failed", {
+      component: "poller",
+      network,
+      err,
+    });
   }
 }
 
@@ -348,7 +366,11 @@ export async function startStreamForNetwork(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     currentStore.markError(message);
-    logger.warn("Initial warm-up failed", { component: "stream", network, err });
+    logger.warn("Initial warm-up failed", {
+      component: "stream",
+      network,
+      err,
+    });
   }
 
   /*
@@ -368,7 +390,8 @@ export async function startStreamForNetwork(
   let cursor = "now";
   let backoffDelay = 1000;
 
-  const { connectHorizonLedgerStream, recordToSample } = await import("./horizon.js");
+  const { connectHorizonLedgerStream, recordToSample } =
+    await import("./horizon.js");
 
   // Run persistent streaming loop with reconnect-with-backoff
   while (!signal?.aborted) {
@@ -438,9 +461,18 @@ export async function startStreamForNetwork(
 export function buildSorobanResponse(network: Network): SorobanMetricsResponse {
   const store = stores[network] ?? stores.mainnet;
   const samples = store.getSorobanSamples();
-  const recentInvocationsTotal = samples.reduce((acc, s) => acc + s.invocationsCount, 0);
-  const successfulInvocationsTotal = samples.reduce((acc, s) => acc + s.successfulCount, 0);
-  const failedInvocationsTotal = samples.reduce((acc, s) => acc + s.failedCount, 0);
+  const recentInvocationsTotal = samples.reduce(
+    (acc, s) => acc + s.invocationsCount,
+    0,
+  );
+  const successfulInvocationsTotal = samples.reduce(
+    (acc, s) => acc + s.successfulCount,
+    0,
+  );
+  const failedInvocationsTotal = samples.reduce(
+    (acc, s) => acc + s.failedCount,
+    0,
+  );
 
   let invocationsPerSecond: number | null = null;
   if (samples.length >= 2) {
@@ -448,7 +480,9 @@ export function buildSorobanResponse(network: Network): SorobanMetricsResponse {
     const end = new Date(samples[samples.length - 1].timestamp).getTime();
     const elapsedSeconds = (end - start) / 1000;
     if (elapsedSeconds > 0) {
-      invocationsPerSecond = Number((recentInvocationsTotal / elapsedSeconds).toFixed(2));
+      invocationsPerSecond = Number(
+        (recentInvocationsTotal / elapsedSeconds).toFixed(2),
+      );
     }
   } else if (samples.length === 1) {
     invocationsPerSecond = 0;
@@ -505,7 +539,8 @@ export function buildOperationBreakdownResponse(
   const kept = named.slice(0, TOP_N_TYPES);
   const tail = named.slice(TOP_N_TYPES);
   const otherCount =
-    (totals.get(OTHER_OPERATION_TYPE) ?? 0) + tail.reduce((acc, [, n]) => acc + n, 0);
+    (totals.get(OTHER_OPERATION_TYPE) ?? 0) +
+    tail.reduce((acc, [, n]) => acc + n, 0);
 
   const share = (count: number) =>
     totalOperations > 0 ? Number((count / totalOperations).toFixed(4)) : 0;

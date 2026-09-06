@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { closeTimeSecondsBetween, isValidCloseTimeSeconds } from "./closeTime.js";
+import {
+  closeTimeSecondsBetween,
+  isValidCloseTimeSeconds,
+} from "./closeTime.js";
 
 describe("isValidCloseTimeSeconds", () => {
   it("accepts a positive finite measurement", () => {
@@ -37,7 +40,9 @@ describe("closeTimeSecondsBetween", () => {
 
   it("returns null when there is no predecessor", () => {
     expect(closeTimeSecondsBetween(null, "2026-09-02T12:00:05Z")).toBeNull();
-    expect(closeTimeSecondsBetween(undefined, "2026-09-02T12:00:05Z")).toBeNull();
+    expect(
+      closeTimeSecondsBetween(undefined, "2026-09-02T12:00:05Z"),
+    ).toBeNull();
   });
 
   it("returns null rather than a negative number when the order is inverted", () => {
@@ -55,8 +60,12 @@ describe("closeTimeSecondsBetween", () => {
   });
 
   it("returns null for an unparseable timestamp", () => {
-    expect(closeTimeSecondsBetween("not a date", "2026-09-02T12:00:05Z")).toBeNull();
-    expect(closeTimeSecondsBetween("2026-09-02T12:00:00Z", "not a date")).toBeNull();
+    expect(
+      closeTimeSecondsBetween("not a date", "2026-09-02T12:00:05Z"),
+    ).toBeNull();
+    expect(
+      closeTimeSecondsBetween("2026-09-02T12:00:00Z", "not a date"),
+    ).toBeNull();
   });
 
   it("returns null when both timestamps are identical", () => {

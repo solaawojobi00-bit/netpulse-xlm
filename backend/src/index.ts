@@ -17,7 +17,10 @@ import {
 } from "./poller.js";
 import { logger } from "./logger.js";
 import { allowedOrigins, allowsAnyOrigin } from "./origins.js";
-import { DEFAULT_SHUTDOWN_TIMEOUT_MS, createShutdownRunner } from "./shutdown.js";
+import {
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  createShutdownRunner,
+} from "./shutdown.js";
 import type { RecentFeesResponse, RecentLedgersResponse } from "./types.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -49,12 +52,16 @@ function sendExportable<T>(
   toCsv: (body: T) => string,
   filename: (body: T, extension: "csv" | "json") => string,
 ): void {
-  const format = typeof req.query.format === "string" ? req.query.format : undefined;
+  const format =
+    typeof req.query.format === "string" ? req.query.format : undefined;
 
   if (format === "csv") {
     res
       .type("text/csv; charset=utf-8")
-      .setHeader("Content-Disposition", `attachment; filename="${filename(body, "csv")}"`);
+      .setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename(body, "csv")}"`,
+      );
     res.send(toCsv(body));
     return;
   }
@@ -101,7 +108,8 @@ export function createApp(): express.Express {
 
   app.get("/api/history", (req, res) => {
     const network = parseNetwork(req);
-    const range = req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
+    const range =
+      req.query.range === "12h" ? 12 : req.query.range === "6h" ? 6 : 24;
     const history = db.getHistory(network, range);
 
     sendExportable(req, res, history, historyToCsv, historyExportFilename);
@@ -116,7 +124,8 @@ export function createApp(): express.Express {
    */
   app.get("/api/trends", (req, res) => {
     const network = parseNetwork(req);
-    const range = req.query.range === "30d" ? 30 : req.query.range === "1y" ? 365 : 90;
+    const range =
+      req.query.range === "30d" ? 30 : req.query.range === "1y" ? 365 : 90;
     const trends = db.getTrends(network, range);
 
     sendExportable(req, res, trends, trendsToCsv, trendsExportFilename);
@@ -149,7 +158,8 @@ if (process.env.NODE_ENV !== "test") {
   const streaming = startPolling(POLL_INTERVAL_MS);
 
   const server = (await import("http")).createServer(app);
-  const { closeWebSocketServer, setupWebSocketServer } = await import("./ws.js");
+  const { closeWebSocketServer, setupWebSocketServer } =
+    await import("./ws.js");
   const wss = setupWebSocketServer(server);
 
   server.listen(PORT, () => {

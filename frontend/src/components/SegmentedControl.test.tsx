@@ -44,13 +44,20 @@ describe("SegmentedControl", () => {
       />,
     );
 
-    expect(screen.getByRole("group", { name: "History time range" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "History time range" }),
+    ).toBeInTheDocument();
   });
 
   it("reports the chosen value on click", async () => {
     const onChange = vi.fn();
     render(
-      <SegmentedControl label="Range" options={OPTIONS} value="24h" onChange={onChange} />,
+      <SegmentedControl
+        label="Range"
+        options={OPTIONS}
+        value="24h"
+        onChange={onChange}
+      />,
     );
 
     await userEvent.click(screen.getByRole("button", { name: "6h" }));
@@ -61,7 +68,12 @@ describe("SegmentedControl", () => {
   it("is operable by keyboard alone, with both Enter and Space", async () => {
     const onChange = vi.fn();
     render(
-      <SegmentedControl label="Range" options={OPTIONS} value="24h" onChange={onChange} />,
+      <SegmentedControl
+        label="Range"
+        options={OPTIONS}
+        value="24h"
+        onChange={onChange}
+      />,
     );
 
     // Tab in from the top rather than calling focus(), so this fails if the

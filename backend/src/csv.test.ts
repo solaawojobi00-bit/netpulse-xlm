@@ -226,10 +226,15 @@ describe("historyToCsv", () => {
 
 describe("historyExportFilename", () => {
   it("names the file after what was exported", () => {
-    expect(historyExportFilename(history, "csv")).toBe("netpulse-history-mainnet-24h.csv");
-    expect(historyExportFilename({ ...history, network: "testnet", range: "6h" }, "json")).toBe(
-      "netpulse-history-testnet-6h.json",
+    expect(historyExportFilename(history, "csv")).toBe(
+      "netpulse-history-mainnet-24h.csv",
     );
+    expect(
+      historyExportFilename(
+        { ...history, network: "testnet", range: "6h" },
+        "json",
+      ),
+    ).toBe("netpulse-history-testnet-6h.json");
   });
 });
 
@@ -325,9 +330,14 @@ describe("trendsToCsv", () => {
 
 describe("trendsExportFilename", () => {
   it("names the file after what was exported", () => {
-    expect(trendsExportFilename(trends, "csv")).toBe("netpulse-trends-mainnet-90d.csv");
+    expect(trendsExportFilename(trends, "csv")).toBe(
+      "netpulse-trends-mainnet-90d.csv",
+    );
     expect(
-      trendsExportFilename({ ...trends, network: "testnet", range: "1y" }, "json"),
+      trendsExportFilename(
+        { ...trends, network: "testnet", range: "1y" },
+        "json",
+      ),
     ).toBe("netpulse-trends-testnet-1y.json");
   });
 

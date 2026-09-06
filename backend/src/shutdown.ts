@@ -52,10 +52,13 @@ export function createShutdownRunner(options: ShutdownRunnerOptions) {
     });
 
     const timer = setTimeout(() => {
-      logger.error(`Shutdown did not complete within ${timeoutMs}ms, forcing exit`, {
-        component: "shutdown",
-        timeoutMs,
-      });
+      logger.error(
+        `Shutdown did not complete within ${timeoutMs}ms, forcing exit`,
+        {
+          component: "shutdown",
+          timeoutMs,
+        },
+      );
       onTimeout();
     }, timeoutMs);
     timer.unref();
