@@ -1,7 +1,15 @@
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+import { validCloseTimeSql } from "./closeTime.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
+
+/*
+ * The rollup's close-time aggregate must agree with the health average about
+ * what counts as a usable sample, so the rule is spelled once, in closeTime.ts,
+ * and interpolated here rather than restated as a literal.
+ */
+const VALID_CLOSE_TIME = validCloseTimeSql("close_time_seconds");
 
 const DEFAULT_DB_PATH =
   process.env.NODE_ENV === "test"
@@ -109,19 +117,42 @@ export class NetPulseDatabase {
        * "WHERE network = ? AND date >= ?" as a leftmost-prefix range scan.
        */
       CREATE TABLE IF NOT EXISTS daily_rollups (
-        network                TEXT NOT NULL,
-        date                   TEXT NOT NULL,
-        avg_close_time_seconds REAL,
-        avg_congestion_usage   REAL,
-        max_congestion_usage   REAL,
-        total_operations       INTEGER NOT NULL DEFAULT 0,
-        total_successful_tx    INTEGER NOT NULL DEFAULT 0,
-        total_failed_tx        INTEGER NOT NULL DEFAULT 0,
-        avg_fee_p50            REAL,
-        avg_fee_p90            REAL,
+        network                  TEXT NOT NULL,
+        date                     TEXT NOT NULL,
+        avg_close_time_seconds   REAL,
+        close_time_sample_count  INTEGER NOT NULL DEFAULT 0,
+        avg_congestion_usage     REAL,
+        max_congestion_usage     REAL,
+        total_operations         INTEGER NOT NULL DEFAULT 0,
+        total_successful_tx      INTEGER NOT NULL DEFAULT 0,
+        total_failed_tx          INTEGER NOT NULL DEFAULT 0,
+        avg_fee_p50              REAL,
+        avg_fee_p90              REAL,
         PRIMARY KEY (network, date)
       );
     `);
+
+    /*
+     * `CREATE TABLE IF NOT EXISTS` cannot add a column to a table that already
+     * exists, so a database created before close_time_sample_count was
+     * introduced would keep the old shape and fail on insert. This is not a
+     * migration framework and should not grow into one — it is the one-line
+     * guard that lets a schema addition reach a database that predates it.
+     */
+    this.ensureColumn(
+      "daily_rollups",
+      "close_time_sample_count",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+
+  /** Adds a column if the table does not already have it. */
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+    }>;
+    if (columns.some((c) => c.name === column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   insertLedgers(network: string, samples: LedgerSample[]): void {
@@ -203,21 +234,33 @@ export class NetPulseDatabase {
    *
    * `date` is derived from `closed_at_unix` rather than parsed out of the
    * `closed_at` text, so it cannot drift with Horizon's formatting.
+   *
+   * Invalid close times are excluded from the average rather than averaged in.
+   * This is the one place where the #84 data-quality bug would have become
+   * irreversible: a poisoned *live* average ages out of a rolling in-memory
+   * window within minutes, but a rollup row is written once and kept forever,
+   * while the raw rows that would let you recompute it are deleted at the
+   * retention boundary. `close_time_sample_count` records how many samples
+   * survived the filter, so a row built from a heavily filtered day is
+   * identifiable after the fact rather than silently confident.
    */
   private rollupCompleteDays(beforeUnix: number): void {
     this.db
       .prepare(
         `
       INSERT OR REPLACE INTO daily_rollups (
-        network, date, avg_close_time_seconds, avg_congestion_usage,
-        max_congestion_usage, total_operations, total_successful_tx,
-        total_failed_tx, avg_fee_p50, avg_fee_p90
+        network, date, avg_close_time_seconds, close_time_sample_count,
+        avg_congestion_usage, max_congestion_usage, total_operations,
+        total_successful_tx, total_failed_tx, avg_fee_p50, avg_fee_p90
       )
       WITH ledger_days AS (
         SELECT
           network,
           strftime('%Y-%m-%d', closed_at_unix / 1000, 'unixepoch') AS date,
-          AVG(close_time_seconds) AS avg_close_time_seconds,
+          AVG(CASE WHEN ${VALID_CLOSE_TIME} THEN close_time_seconds END)
+            AS avg_close_time_seconds,
+          COUNT(CASE WHEN ${VALID_CLOSE_TIME} THEN 1 END)
+            AS close_time_sample_count,
           SUM(operation_count) AS total_operations,
           SUM(successful_tx_count) AS total_successful_tx,
           SUM(failed_tx_count) AS total_failed_tx
@@ -246,6 +289,7 @@ export class NetPulseDatabase {
         d.network,
         d.date,
         l.avg_close_time_seconds,
+        COALESCE(l.close_time_sample_count, 0),
         f.avg_congestion_usage,
         f.max_congestion_usage,
         COALESCE(l.total_operations, 0),

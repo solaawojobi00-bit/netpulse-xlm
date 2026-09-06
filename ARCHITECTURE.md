@@ -122,6 +122,16 @@ from.
   exposed on the `db` facade — deleting a day without summarising it first is a
   one-way door, so the only entry point reachable from production code is the
   safe one.
+- Invalid close times are **excluded** from `avg_close_time_seconds` rather
+  than averaged in, using the same `finite AND > 0` rule as the live health
+  average — spelled once in `closeTime.ts`, as a predicate for TypeScript and
+  as a SQL fragment for this aggregate, so the two cannot drift. This is the
+  one place where a bad sample would be irreversible: a poisoned live average
+  ages out of the rolling window within minutes, but a rollup row is permanent
+  and the raw rows behind it are deleted at the boundary.
+  `close_time_sample_count` records how many samples survived the filter, so a
+  row computed from a heavily filtered day is identifiable rather than
+  silently confident.
 
 **Still no auth and no user-specific data** — deliberately, per the PRD
 out-of-scope list. The database holds public network measurements only;

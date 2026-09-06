@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isValidCloseTimeSeconds } from "./closeTime.js";
 import { NetPulseDatabase, db as dbFacade, floorToUtcMidnight } from "./db.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
@@ -257,6 +258,7 @@ describe("NetPulseDatabase Unit Tests", () => {
       network: string;
       date: string;
       avg_close_time_seconds: number | null;
+      close_time_sample_count: number;
       avg_congestion_usage: number | null;
       max_congestion_usage: number | null;
       total_operations: number;
@@ -516,6 +518,129 @@ describe("NetPulseDatabase Unit Tests", () => {
       expect(rawLedgerCount()).toBe(1);
     });
 
+    describe("close time validity", () => {
+      /*
+       * A poisoned live average ages out of the rolling window in minutes; a
+       * poisoned rollup row is permanent, and the raw rows that would let you
+       * recompute it are deleted at the retention boundary. This is where the
+       * #84 data-quality bug would have become irreversible.
+       */
+      it("averages only the valid samples in a mixed day", () => {
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: -36192909 }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: -36192904 }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: 4 }),
+          createLedgerSample(4, at(1, 4), { closeTimeSeconds: 6 }),
+          createLedgerSample(5, at(1, 5), { closeTimeSeconds: 8 }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(6); // avg(4, 6, 8)
+        expect(row.close_time_sample_count).toBe(3);
+      });
+
+      it("yields null, not zero, for a day whose samples are all invalid", () => {
+        // No data is not the same as zero seconds.
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: -5 }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: 0 }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: null }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBeNull();
+        expect(row.close_time_sample_count).toBe(0);
+      });
+
+      it("keeps operation and transaction totals correct despite bad close times", () => {
+        // A bad close time discards that sample's close time, not the rest of
+        // the ledger's data.
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), {
+            closeTimeSeconds: -36192909,
+            operationCount: 100,
+            successfulTransactionCount: 10,
+            failedTransactionCount: 2,
+          }),
+          createLedgerSample(2, at(1, 2), {
+            closeTimeSeconds: 6,
+            operationCount: 50,
+            successfulTransactionCount: 5,
+            failedTransactionCount: 1,
+          }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(6);
+        expect(row.close_time_sample_count).toBe(1);
+        expect(row.total_operations).toBe(150);
+        expect(row.total_successful_tx).toBe(15);
+        expect(row.total_failed_tx).toBe(3);
+      });
+
+      it("excludes an infinite close time, which a bare > 0 check would pass", () => {
+        /*
+         * SQLite stores +Infinity as a real and `+Infinity > 0` is true, so a
+         * predicate of just `> 0` lets it through and the average becomes
+         * Infinity — one bad row destroying the whole day. NaN needs no guard:
+         * SQLite stores it as NULL, which AVG already skips.
+         */
+        db.insertLedgers("mainnet", [
+          createLedgerSample(1, at(1, 1), { closeTimeSeconds: Infinity }),
+          createLedgerSample(2, at(1, 2), { closeTimeSeconds: -Infinity }),
+          createLedgerSample(3, at(1, 3), { closeTimeSeconds: NaN }),
+          createLedgerSample(4, at(1, 4), { closeTimeSeconds: 4 }),
+          createLedgerSample(5, at(1, 5), { closeTimeSeconds: 6 }),
+        ]);
+
+        db.rollupAndPrune();
+
+        const row = rollupFor(1)!;
+        expect(row.avg_close_time_seconds).toBe(5); // avg(4, 6)
+        expect(Number.isFinite(row.avg_close_time_seconds!)).toBe(true);
+        expect(row.close_time_sample_count).toBe(2);
+      });
+
+      it("agrees with isValidCloseTimeSeconds sample for sample", () => {
+        /*
+         * The criterion that the SQL and the predicate share one definition,
+         * asserted rather than reviewed: the count the rollup recorded must
+         * equal the count the TypeScript predicate accepts over the same input.
+         */
+        const samples = [-36192909, -1, 0, 0.5, 4, 6, 8, Infinity, -Infinity, NaN];
+
+        db.insertLedgers(
+          "mainnet",
+          samples.map((closeTimeSeconds, i) =>
+            createLedgerSample(i + 1, at(1, 1, i), { closeTimeSeconds }),
+          ),
+        );
+
+        db.rollupAndPrune();
+
+        const expected = samples.filter(isValidCloseTimeSeconds);
+        expect(rollupFor(1)!.close_time_sample_count).toBe(expected.length);
+        expect(rollupFor(1)!.avg_close_time_seconds).toBeCloseTo(
+          expected.reduce((sum, v) => sum + v, 0) / expected.length,
+          10,
+        );
+      });
+
+      it("records a sample count of zero for a day with no ledgers at all", () => {
+        db.insertFeeSnapshot("mainnet", createFeeSnapshot(at(1)));
+
+        db.rollupAndPrune();
+
+        expect(rollupFor(1)!.close_time_sample_count).toBe(0);
+      });
+    });
+
     it("does not double-count after a failed run is retried", () => {
       db.insertLedgers("mainnet", [
         createLedgerSample(1, at(9), { operationCount: 77 }),
@@ -533,6 +658,90 @@ describe("NetPulseDatabase Unit Tests", () => {
 
       expect(rollupFor(9)!.total_operations).toBe(77);
       expect(rawLedgerCount()).toBe(0);
+    });
+  });
+
+  describe("schema migration", () => {
+    it("adds close_time_sample_count to a daily_rollups table that predates it", () => {
+      /*
+       * CREATE TABLE IF NOT EXISTS is a no-op against an existing table, so a
+       * database created before this column existed would keep the old shape
+       * and fail on insert. Simulated by creating the pre-#91 table and then
+       * opening a NetPulseDatabase over the same connection's file — here, by
+       * dropping and recreating the table on an open instance and re-running
+       * the schema step.
+       */
+      const scratch = new NetPulseDatabase(":memory:");
+      try {
+        const raw = (scratch as any).db;
+        raw.exec("DROP TABLE daily_rollups");
+        raw.exec(`
+          CREATE TABLE daily_rollups (
+            network                TEXT NOT NULL,
+            date                   TEXT NOT NULL,
+            avg_close_time_seconds REAL,
+            avg_congestion_usage   REAL,
+            max_congestion_usage   REAL,
+            total_operations       INTEGER NOT NULL DEFAULT 0,
+            total_successful_tx    INTEGER NOT NULL DEFAULT 0,
+            total_failed_tx        INTEGER NOT NULL DEFAULT 0,
+            avg_fee_p50            REAL,
+            avg_fee_p90            REAL,
+            PRIMARY KEY (network, date)
+          );
+        `);
+
+        const columnNames = (): string[] =>
+          (raw.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+            name: string;
+          }>).map((c) => c.name);
+
+        expect(columnNames()).not.toContain("close_time_sample_count");
+
+        // Re-running the schema step is what a restart on an old database does.
+        (scratch as any).initSchema();
+
+        expect(columnNames()).toContain("close_time_sample_count");
+
+        // And the rollup can now write to it.
+        scratch.insertLedgers("mainnet", [
+          {
+            sequence: 1,
+            closedAt: "2020-01-01T12:00:00.000Z",
+            closeTimeSeconds: 5,
+            successfulTransactionCount: 1,
+            failedTransactionCount: 0,
+            operationCount: 3,
+            txSetOperationCount: 3,
+            baseFeeInStroops: 100,
+            maxTxSetSize: 1000,
+          },
+        ]);
+        expect(() => scratch.rollupAndPrune()).not.toThrow();
+        expect(
+          raw.prepare("SELECT close_time_sample_count c FROM daily_rollups").get().c,
+        ).toBe(1);
+      } finally {
+        scratch.close();
+      }
+    });
+
+    it("is idempotent — re-running the schema step leaves the column alone", () => {
+      const scratch = new NetPulseDatabase(":memory:");
+      try {
+        (scratch as any).initSchema();
+        (scratch as any).initSchema();
+
+        const matching = (
+          (scratch as any).db.prepare("PRAGMA table_info(daily_rollups)").all() as Array<{
+            name: string;
+          }>
+        ).filter((c) => c.name === "close_time_sample_count");
+
+        expect(matching).toHaveLength(1);
+      } finally {
+        scratch.close();
+      }
     });
   });
 
