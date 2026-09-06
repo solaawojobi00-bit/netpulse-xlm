@@ -1,4 +1,4 @@
-import type { HistoryResponse } from "./db.js";
+import type { HistoryResponse, TrendsResponse } from "./db.js";
 
 /*
  * A hand-rolled writer rather than a dependency: the row shape is flat with a
@@ -111,4 +111,58 @@ export function historyExportFilename(
   extension: "csv" | "json",
 ): string {
   return exportFilename("history", history.network, history.range, extension);
+}
+
+/**
+ * Columns in emitted order, mirroring `HISTORY_CSV_COLUMNS`.
+ *
+ * `network` and `range` are denormalised onto every row for the same reason as
+ * history: an exported file should stand on its own without the request that
+ * produced it.
+ *
+ * Successful and failed transactions stay separate rather than summed, as they
+ * are in the JSON. Summing them here to match history's single `transactions`
+ * column would discard information the table holds, and a spreadsheet can add
+ * two columns far more easily than it can recover one.
+ */
+export const TRENDS_CSV_COLUMNS = [
+  "network",
+  "range",
+  "date",
+  "closeTimeSeconds",
+  "congestionUsage",
+  "maxCongestionUsage",
+  "operations",
+  "successfulTransactions",
+  "failedTransactions",
+  "p50Fee",
+  "p90Fee",
+] as const;
+
+/** Serialises a trends response to CSV, one row per day. */
+export function trendsToCsv(trends: TrendsResponse): string {
+  return buildCsv(
+    TRENDS_CSV_COLUMNS,
+    trends.points.map((point) => ({
+      network: trends.network,
+      range: trends.range,
+      date: point.date,
+      closeTimeSeconds: point.closeTimeSeconds,
+      congestionUsage: point.congestionUsage,
+      maxCongestionUsage: point.maxCongestionUsage,
+      operations: point.operations,
+      successfulTransactions: point.successfulTransactions,
+      failedTransactions: point.failedTransactions,
+      p50Fee: point.p50Fee,
+      p90Fee: point.p90Fee,
+    })),
+  );
+}
+
+/** `exportFilename` bound to the trends resource. */
+export function trendsExportFilename(
+  trends: TrendsResponse,
+  extension: "csv" | "json",
+): string {
+  return exportFilename("trends", trends.network, trends.range, extension);
 }

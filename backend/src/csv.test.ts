@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   HISTORY_CSV_COLUMNS,
+  TRENDS_CSV_COLUMNS,
   buildCsv,
   exportFilename,
   historyExportFilename,
   historyToCsv,
+  trendsExportFilename,
+  trendsToCsv,
 } from "./csv.js";
-import type { HistoryResponse } from "./db.js";
+import type { HistoryResponse, TrendsResponse } from "./db.js";
 
 const history: HistoryResponse = {
   network: "mainnet",
@@ -226,6 +229,111 @@ describe("historyExportFilename", () => {
     expect(historyExportFilename(history, "csv")).toBe("netpulse-history-mainnet-24h.csv");
     expect(historyExportFilename({ ...history, network: "testnet", range: "6h" }, "json")).toBe(
       "netpulse-history-testnet-6h.json",
+    );
+  });
+});
+
+const trends: TrendsResponse = {
+  network: "mainnet",
+  range: "90d",
+  points: [
+    {
+      date: "2026-09-04",
+      closeTimeSeconds: 5.62,
+      congestionUsage: 0.4213,
+      maxCongestionUsage: 0.9871,
+      operations: 3427194,
+      successfulTransactions: 1044821,
+      failedTransactions: 20713,
+      p50Fee: 137,
+      p90Fee: 9042,
+    },
+    {
+      // A day with ledgers but no fee snapshots — the nullable case the rollup
+      // actually produces.
+      date: "2026-09-05",
+      closeTimeSeconds: null,
+      congestionUsage: null,
+      maxCongestionUsage: null,
+      operations: 12,
+      successfulTransactions: 3,
+      failedTransactions: 0,
+      p50Fee: null,
+      p90Fee: null,
+    },
+  ],
+};
+
+describe("trendsToCsv", () => {
+  it("emits the header in the documented column order", () => {
+    const [header] = trendsToCsv(trends).split("\r\n");
+
+    expect(header).toBe(
+      "network,range,date,closeTimeSeconds,congestionUsage,maxCongestionUsage," +
+        "operations,successfulTransactions,failedTransactions,p50Fee,p90Fee",
+    );
+    expect(TRENDS_CSV_COLUMNS).toHaveLength(11);
+  });
+
+  it("writes one row per day with network and range denormalised onto each", () => {
+    const [, first, second] = trendsToCsv(trends).split("\r\n");
+
+    expect(first).toBe(
+      "mainnet,90d,2026-09-04,5.62,0.4213,0.9871,3427194,1044821,20713,137,9042",
+    );
+    expect(second).toBe("mainnet,90d,2026-09-05,,,,12,3,0,,");
+  });
+
+  it("writes nulls as empty fields, not the text null", () => {
+    const csv = trendsToCsv(trends);
+
+    expect(csv).not.toContain("null");
+    // Three consecutive empty fee/congestion fields on the second row.
+    expect(csv).toContain("2026-09-05,,,,12");
+  });
+
+  it("keeps a genuine zero as 0", () => {
+    // failedTransactions is 0 on the second row, and must not be blank.
+    const [, , second] = trendsToCsv(trends).split("\r\n");
+
+    expect(second.split(",")[8]).toBe("0");
+  });
+
+  it("terminates every row with CRLF including the final one", () => {
+    const csv = trendsToCsv(trends);
+
+    expect(csv.endsWith("\r\n")).toBe(true);
+    expect(csv.split("\r\n")).toHaveLength(4); // header + 2 rows + trailing empty
+  });
+
+  it("emits only a header when there are no points", () => {
+    const csv = trendsToCsv({ ...trends, points: [] });
+
+    expect(csv.split("\r\n")).toHaveLength(2);
+    expect(csv.endsWith("\r\n")).toBe(true);
+  });
+
+  it("keeps successful and failed transactions in separate columns", () => {
+    // Summing them to match history's single `transactions` column would
+    // discard what the table holds; a spreadsheet can add two columns.
+    const [header] = trendsToCsv(trends).split("\r\n");
+
+    expect(header).toContain("successfulTransactions,failedTransactions");
+    expect(header).not.toContain(",transactions,");
+  });
+});
+
+describe("trendsExportFilename", () => {
+  it("names the file after what was exported", () => {
+    expect(trendsExportFilename(trends, "csv")).toBe("netpulse-trends-mainnet-90d.csv");
+    expect(
+      trendsExportFilename({ ...trends, network: "testnet", range: "1y" }, "json"),
+    ).toBe("netpulse-trends-testnet-1y.json");
+  });
+
+  it("does not collide with a history export of the same network and range", () => {
+    expect(trendsExportFilename(trends, "csv")).not.toBe(
+      historyExportFilename({ ...history, range: "90d" }, "csv"),
     );
   });
 });
