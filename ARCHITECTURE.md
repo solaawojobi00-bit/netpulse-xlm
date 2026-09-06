@@ -83,9 +83,16 @@ alongside the in-memory window rather than replacing it:
 
 - The in-memory rolling window still serves every live view. It stays the
   hot path — no query hits disk to render the dashboard's live charts.
-- SQLite additionally records ledgers and fee snapshots, pruned to a 7-day
-  retention window, and serves the longer-range history view via 5-minute
-  bucket aggregation in SQL.
+- SQLite additionally records ledgers and fee snapshots, pruned to a
+  retention window of 7-8 whole UTC days, and serves the longer-range history
+  view via 5-minute bucket aggregation in SQL.
+- The prune cutoff is floored to UTC midnight, so a day in the store is
+  either complete or absent, never a fragment. An unfloored cutoff lands at
+  whatever time the prune runs and slices the boundary day in half, which
+  makes the size of the oldest day depend on when the timer fired and makes
+  any day-grain aggregate over it unsafe. The cost is that retention is
+  7-8 days rather than exactly 7 — never less than `RETENTION_DAYS`,
+  sometimes up to a day more.
 - Ledgers are keyed on `(network, sequence)` with `INSERT OR REPLACE`, so
   a stream reconnect that re-delivers a ledger is idempotent rather than
   double-counting.
@@ -108,7 +115,7 @@ Public Horizon (horizon.stellar.org / horizon-testnet.stellar.org)
 Backend ingestion (persistent SSE stream + ~6s interval for the polled endpoints)
         │  - normalizes into internal types (LedgerSample, FeeSnapshot, SorobanSample)
         │  - appends to a capped in-memory rolling window, per network
-        │  - writes ledgers + fee snapshots to SQLite (7-day retention)
+        │  - writes ledgers + fee snapshots to SQLite (7-8 whole UTC days)
         │  - reconnects with exponential backoff (1s → 30s cap), resuming
         │    from its last paging token — see the SSE section above;
         │    a fresh start streams from "now", so resumption is not

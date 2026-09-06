@@ -8,9 +8,26 @@ const DEFAULT_DB_PATH =
     ? ":memory:"
     : process.env.DATABASE_PATH ?? "./data/netpulse.db";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const RETENTION_DAYS = 7;
-const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const RETENTION_MS = RETENTION_DAYS * DAY_MS;
 const BUCKET_RESOLUTION_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Floors a Unix timestamp to the UTC midnight that begins its day.
+ *
+ * Plain arithmetic is exact here rather than approximate: Unix time counts no
+ * leap seconds, so every UTC day is exactly `DAY_MS` long, and the epoch itself
+ * begins at a UTC midnight. That also makes it independent of the host
+ * timezone, which `Date`'s local-time accessors would not be.
+ *
+ * Exported for testing, and because the rollup work in #87 needs to agree with
+ * the prune about where a day starts.
+ */
+export function floorToUtcMidnight(timestampMs: number): number {
+  return Math.floor(timestampMs / DAY_MS) * DAY_MS;
+}
 
 export interface HistoryPoint {
   timestamp: string;
@@ -130,8 +147,24 @@ export class NetPulseDatabase {
     );
   }
 
+  /**
+   * Deletes raw rows older than the retention window, rounded down so that
+   * only whole UTC days are ever removed.
+   *
+   * `Date.now() - retentionMs` alone lands at whatever wall-clock time the
+   * prune happens to run, which slices a UTC day in half: a run at 14:00Z
+   * deletes the first fourteen hours of the boundary day and keeps the rest.
+   * That leaves the oldest day in the store as a fragment of unpredictable
+   * size — the amount kept depends on the minute the timer fired — and makes
+   * any day-grain aggregate over it unsafe, because a half-deleted day is
+   * indistinguishable from a complete one.
+   *
+   * Flooring the cutoff to UTC midnight trades an exact rolling seven days for
+   * **7-8 whole UTC days**: never fewer than `RETENTION_DAYS`, sometimes up to
+   * one more, and every day in the store either complete or absent.
+   */
   pruneOlderThan(retentionMs: number = RETENTION_MS): void {
-    const cutoff = Date.now() - retentionMs;
+    const cutoff = floorToUtcMidnight(Date.now() - retentionMs);
     this.db.prepare("DELETE FROM ledgers WHERE closed_at_unix < ?").run(cutoff);
     this.db.prepare("DELETE FROM fee_snapshots WHERE fetched_at_unix < ?").run(cutoff);
   }

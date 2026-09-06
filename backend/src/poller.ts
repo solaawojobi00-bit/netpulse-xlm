@@ -22,6 +22,18 @@ const MAX_FEE_SNAPSHOTS = 10;
 const MAX_SOROBAN_SAMPLES = 20;
 const LEDGERS_PER_POLL = 20;
 
+/*
+ * How often retention is enforced after the startup prune. Retention is a
+ * once-a-day concern — RETENTION_DAYS is 7 — so six hours is already several
+ * times more often than the boundary it enforces actually moves. Deliberately
+ * not tied to the Horizon poll interval: that fires every few seconds, and a
+ * day-scan does not belong there.
+ *
+ * Exported so the retention tests advance by the real period rather than
+ * restating the number and drifting from it.
+ */
+export const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 /** Operation-type samples are kept in step with the Soroban ones — same poll. */
 const MAX_OPERATION_SAMPLES = MAX_SOROBAN_SAMPLES;
 
@@ -533,13 +545,28 @@ export interface StreamingHandle {
   stop: () => Promise<void>;
 }
 
-export function startStreaming(intervalMs: number): StreamingHandle {
-  // Prune historical records older than retention policy
+/**
+ * Prunes historical records older than the retention policy.
+ *
+ * A prune failure is logged and swallowed: retention is housekeeping, and a
+ * database that cannot be pruned is still a database that can serve reads and
+ * accept writes. Taking the process down over it would turn a growing file
+ * into an outage.
+ */
+function pruneWithLogging(): void {
   try {
     db.pruneOlderThan();
   } catch (err) {
     logger.error("Prune failed", { component: "db", err });
   }
+}
+
+export function startStreaming(intervalMs: number): StreamingHandle {
+  // Prune on the way in, then again periodically. Startup alone is not enough:
+  // a process that stays up for weeks would honour RETENTION_DAYS exactly once
+  // and let the SQLite file grow unbounded until someone happened to redeploy.
+  pruneWithLogging();
+  const pruneInterval = setInterval(pruneWithLogging, PRUNE_INTERVAL_MS);
 
   /*
    * startStreamForNetwork already accepted an AbortSignal but nothing ever
@@ -567,6 +594,7 @@ export function startStreaming(intervalMs: number): StreamingHandle {
   return {
     async stop() {
       clearInterval(interval);
+      clearInterval(pruneInterval);
       controller.abort();
       // allSettled: a stream rejecting on the way out must not stop the rest
       // of shutdown, and the loops swallow their own errors anyway.

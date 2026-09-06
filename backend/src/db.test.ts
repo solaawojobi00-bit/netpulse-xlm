@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NetPulseDatabase } from "./db.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NetPulseDatabase, floorToUtcMidnight } from "./db.js";
 import type { FeeSnapshot, LedgerSample } from "./types.js";
 
 describe("NetPulseDatabase Unit Tests", () => {
@@ -102,32 +102,161 @@ describe("NetPulseDatabase Unit Tests", () => {
   });
 
   describe("pruneOlderThan", () => {
-    it("deletes rows older than cutoff from both tables while preserving rows in window", () => {
-      const now = Date.now();
-      const retentionMs = 60 * 1000; // 60 seconds cutoff
+    /*
+     * These run on a frozen clock. The cutoff is derived from Date.now(), and
+     * the whole point of the flooring is that the retained set does not depend
+     * on when the prune fires — which cannot be asserted while the clock moves
+     * underneath the assertions.
+     */
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
-      const oldTime = new Date(now - 120 * 1000).toISOString(); // 2 minutes old (pruned)
-      const recentTime = new Date(now - 30 * 1000).toISOString(); // 30 seconds old (kept)
+    /** 2026-09-04T14:00:00Z — mid-afternoon, the case that used to split a day. */
+    const NOW = Date.UTC(2026, 8, 4, 14, 0, 0);
 
-      db.insertLedgers("mainnet", [
-        createLedgerSample(1, oldTime),
-        createLedgerSample(2, recentTime),
-      ]);
+    /** An instant `days` before NOW's UTC midnight, offset within that day. */
+    const dayAt = (daysAgo: number, hours = 12): string =>
+      new Date(Date.UTC(2026, 8, 4) - daysAgo * DAY_MS + hours * 60 * 60 * 1000).toISOString();
 
-      db.insertFeeSnapshot("mainnet", createFeeSnapshot(oldTime));
-      db.insertFeeSnapshot("mainnet", createFeeSnapshot(recentTime));
+    const seed = (times: string[]) => {
+      db.insertLedgers(
+        "mainnet",
+        times.map((t, i) => createLedgerSample(i + 1, t)),
+      );
+      for (const t of times) db.insertFeeSnapshot("mainnet", createFeeSnapshot(t));
+    };
 
-      db.pruneOlderThan(retentionMs);
+    const remainingLedgerTimes = (): string[] =>
+      ((db as any).db
+        .prepare("SELECT closed_at FROM ledgers WHERE network = 'mainnet' ORDER BY closed_at_unix")
+        .all() as Array<{ closed_at: string }>).map((r) => r.closed_at);
 
-      const remainingLedgers = (db as any).db
-        .prepare("SELECT sequence FROM ledgers WHERE network = 'mainnet'")
-        .all();
-      expect(remainingLedgers).toEqual([{ sequence: 2 }]);
-
-      const remainingFees = (db as any).db
+    const remainingFeeCount = (): number =>
+      (db as any).db
         .prepare("SELECT COUNT(*) as c FROM fee_snapshots WHERE network = 'mainnet'")
         .get().c;
-      expect(remainingFees).toBe(1);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("deletes rows older than cutoff from both tables while preserving rows in window", () => {
+      const oldTime = dayAt(3); // three days back (pruned)
+      const recentTime = dayAt(0); // today (kept)
+
+      seed([oldTime, recentTime]);
+
+      db.pruneOlderThan(DAY_MS);
+
+      expect(remainingLedgerTimes()).toEqual([recentTime]);
+      expect(remainingFeeCount()).toBe(1);
+    });
+
+    it("keeps or deletes a whole UTC day, never part of one", () => {
+      /*
+       * The case from the issue: a 14:00Z prune with a 7-day retention would
+       * previously cut at Aug 28 14:00Z, deleting that morning and keeping
+       * that afternoon. Both of these sit on the boundary day.
+       */
+      const boundaryMorning = dayAt(7, 2);
+      const boundaryEvening = dayAt(7, 22);
+
+      seed([boundaryMorning, boundaryEvening]);
+
+      db.pruneOlderThan(7 * DAY_MS);
+
+      expect(remainingLedgerTimes()).toEqual([boundaryMorning, boundaryEvening]);
+      expect(remainingFeeCount()).toBe(2);
+    });
+
+    it("retains the last instant of the oldest kept day and drops the first of the day before", () => {
+      // Cutoff for a 7-day retention taken at NOW is Aug 28 00:00:00.000Z.
+      const cutoff = Date.UTC(2026, 7, 28);
+      const lastKept = new Date(cutoff - 1 + DAY_MS).toISOString(); // Aug 28 23:59:59.999Z
+      const firstDropped = new Date(cutoff - DAY_MS).toISOString(); // Aug 27 00:00:00.000Z
+      const exactlyCutoff = new Date(cutoff).toISOString(); // Aug 28 00:00:00.000Z
+
+      seed([firstDropped, exactlyCutoff, lastKept]);
+
+      db.pruneOlderThan(7 * DAY_MS);
+
+      // The comparison is `< cutoff`, so the cutoff instant itself is kept.
+      expect(remainingLedgerTimes()).toEqual([exactlyCutoff, lastKept]);
+      expect(remainingFeeCount()).toBe(2);
+    });
+
+    it("never retains less than the retention window", () => {
+      // A row exactly RETENTION_DAYS old must survive; flooring may keep more,
+      // never less.
+      const exactlyRetentionOld = new Date(NOW - 7 * DAY_MS).toISOString();
+
+      seed([exactlyRetentionOld]);
+
+      db.pruneOlderThan(7 * DAY_MS);
+
+      expect(remainingLedgerTimes()).toEqual([exactlyRetentionOld]);
+    });
+
+    it("retains the same set regardless of the wall-clock time of the run", () => {
+      const times = [dayAt(9), dayAt(8), dayAt(7), dayAt(6), dayAt(0)];
+
+      /** Prunes a fresh database at a given time of the same UTC day. */
+      const retainedWhenRunAt = (hour: number, minute: number): string[] => {
+        const scratch = new NetPulseDatabase(":memory:");
+        try {
+          scratch.insertLedgers(
+            "mainnet",
+            times.map((t, i) => createLedgerSample(i + 1, t)),
+          );
+          vi.setSystemTime(Date.UTC(2026, 8, 4, hour, minute, 0));
+          scratch.pruneOlderThan(7 * DAY_MS);
+          return ((scratch as any).db
+            .prepare("SELECT closed_at FROM ledgers ORDER BY closed_at_unix")
+            .all() as Array<{ closed_at: string }>).map((r) => r.closed_at);
+        } finally {
+          scratch.close();
+        }
+      };
+
+      const justAfterMidnight = retainedWhenRunAt(0, 0);
+      const midAfternoon = retainedWhenRunAt(14, 0);
+      const lastMinute = retainedWhenRunAt(23, 59);
+
+      expect(midAfternoon).toEqual(justAfterMidnight);
+      expect(lastMinute).toEqual(justAfterMidnight);
+
+      // And it is the set we expect, not three identically wrong answers.
+      expect(justAfterMidnight).toEqual([dayAt(7), dayAt(6), dayAt(0)]);
+    });
+  });
+
+  describe("floorToUtcMidnight", () => {
+    it("returns the UTC midnight that begins the day", () => {
+      expect(floorToUtcMidnight(Date.UTC(2026, 8, 4, 14, 32, 7, 500))).toBe(
+        Date.UTC(2026, 8, 4),
+      );
+    });
+
+    it("is idempotent on a midnight", () => {
+      const midnight = Date.UTC(2026, 8, 4);
+      expect(floorToUtcMidnight(midnight)).toBe(midnight);
+    });
+
+    it("keeps the last millisecond of a day in that day", () => {
+      expect(floorToUtcMidnight(Date.UTC(2026, 8, 4, 23, 59, 59, 999))).toBe(
+        Date.UTC(2026, 8, 4),
+      );
+    });
+
+    it("crosses month and year boundaries correctly", () => {
+      expect(floorToUtcMidnight(Date.UTC(2026, 0, 1, 0, 0, 0, 1))).toBe(Date.UTC(2026, 0, 1));
+      expect(floorToUtcMidnight(Date.UTC(2025, 11, 31, 23, 59, 59, 999))).toBe(
+        Date.UTC(2025, 11, 31),
+      );
     });
   });
 
