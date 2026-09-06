@@ -77,7 +77,9 @@ export function TrendsView({
           onChange={onRangeChange}
         />
       )}
-      <span className="history-badge">Daily resolution · retained indefinitely</span>
+      <span className="history-badge">
+        Daily resolution · retained indefinitely
+      </span>
     </div>
   );
 
@@ -140,8 +142,8 @@ export function TrendsView({
         <div>
           <h2 id="trends-heading">{range} Long-Range Trends</h2>
           <p className="history-section__subtitle">
-            Daily aggregates from persistent storage, kept beyond the raw retention
-            window
+            Daily aggregates from persistent storage, kept beyond the raw
+            retention window
           </p>
         </div>
         {headerControls}
@@ -210,7 +212,7 @@ export function TrendsView({
               />
               <Tooltip
                 {...tooltipProps}
-                formatter={(v: any, name: any) => [`${v}%`, name]}
+                formatter={(v, name) => [`${String(v)}%`, name]}
               />
               {/*
                * Peak alongside average, because a day that averages calm can
