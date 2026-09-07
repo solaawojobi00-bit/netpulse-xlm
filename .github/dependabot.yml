@@ -55,6 +55,16 @@ updates:
         patterns:
           - "vite"
           - "@vitejs/plugin-react"
+      # Same exact-version peer pin as the /backend entry: vitest@5.0.0
+      # requires @vitest/coverage-v8@5.0.0 and vice versa, so they must move
+      # together on every release, patches included. This group was not needed
+      # here until #151 added @vitest/coverage-v8 to frontend; without it,
+      # Dependabot would open split PRs and reproduce the ERESOLVE failures
+      # (#119, #120, #142, #158) that the /backend group was added to stop.
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
     # Same reasoning as the /backend entry: hold TypeScript majors for a
     # deliberate typescript-go migration. TS 7 already breaks the frontend build
     # (TS2882 on the side-effect import of styles.css in src/main.tsx).
