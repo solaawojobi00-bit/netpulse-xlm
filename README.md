@@ -17,7 +17,7 @@ See [PRD.md](./PRD.md) for scope and metrics, and
 dashboard stays live.
 
 Building against NetPulse? [docs/API.md](./docs/API.md) is the reference for
-all seven REST routes and the `/ws` WebSocket channel — response shapes, field
+all eight REST routes and the `/ws` WebSocket channel — response shapes, field
 descriptions, which fields are nullable and why, and the behaviours that are
 easy to get wrong.
 

@@ -7,9 +7,11 @@ Thank you for your interest in contributing to NetPulse! This guide outlines how
 ## Prerequisites
 
 - **Node.js**: Version 24 (matching the CI environment, which pins
-  `node-version: 24`). Older versions may work but are not what CI runs
-  against, and the dependency-audit step behaves differently on npm 10 and
-  older — see [Running Checks](#running-checks).
+  `node-version: 24`). Both packages declare engine floors (`^22.12.0 || ^24.0.0 || >=26.0.0`
+  for `backend/` and `^22.22.2 || ^24.15.0 || >=26.0.0` for `frontend/`).
+  Older versions may work locally but are not what CI runs against, and the
+  dependency-audit step behaves differently on npm 10 and older — see
+  [Running Checks](#running-checks).
 - **npm**: Whatever ships with Node 24 (npm 11). No separate install needed.
 - **Git**: Configured with your name and email.
 
@@ -106,11 +108,20 @@ node .github/scripts/audit-deps.mjs backend
 In `backend/`:
 
 ```bash
+# Lint with ESLint
+npm run lint
+
+# Check formatting with Prettier (npm run format fixes findings)
+npm run format:check
+
 # Type-check TypeScript
 npx tsc --noEmit
 
 # Run unit and integration tests
 npm test
+
+# Run tests with coverage thresholds (vitest.config.ts)
+npm run test:coverage
 ```
 
 ### Frontend Checks
@@ -125,6 +136,12 @@ node .github/scripts/audit-deps.mjs frontend --omit=dev
 In `frontend/`:
 
 ```bash
+# Lint with ESLint
+npm run lint
+
+# Check formatting with Prettier (npm run format fixes findings)
+npm run format:check
+
 # Type-check and build production bundle
 npm run build
 
@@ -133,6 +150,9 @@ npm run audit:contrast
 
 # Run frontend tests
 npm test
+
+# Run tests with coverage thresholds (vite.config.ts)
+npm run test:coverage
 ```
 
 `npm run audit:contrast` is easy to forget locally and will fail the frontend
@@ -150,19 +170,20 @@ means your dependencies were not audited — it is not a clean bill of health.**
 
 ### What must be green
 
-Five checks run on a pull request, across two workflow files, and all must pass
+Checks run on pull requests across several workflow files, and all required status checks must pass
 before merge:
 
 | Check | Workflow |
 | --- | --- |
 | Backend Type-Check & Tests | `.github/workflows/ci.yml` |
 | Frontend Build & Tests | `.github/workflows/ci.yml` |
-| Secret Scan (gitleaks) | `.github/workflows/ci.yml` |
+| Secret Scan | `.github/workflows/secret-scan.yml` |
 | Analyze (javascript-typescript) | `.github/workflows/codeql.yml` |
-| CodeQL | `.github/workflows/codeql.yml` |
+| Verify lockfile (backend) | `.github/workflows/lockfile-verify.yml` |
+| Verify lockfile (frontend) | `.github/workflows/lockfile-verify.yml` |
 
-The Secret Scan and CodeQL checks have no local equivalent in the commands
-above; they run only in CI.
+The Secret Scan, CodeQL, and Lockfile Verify checks have no local equivalent in the commands
+above; they run in CI.
 
 Branch protection also requires your branch to be up to date with `main`, so a
 PR that has fallen behind needs updating before it can merge:
