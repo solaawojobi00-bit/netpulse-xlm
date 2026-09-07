@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Only the working tree is inspected, so the default shallow fetch is
           # enough. Nothing here talks to the API, so leaving a token behind in

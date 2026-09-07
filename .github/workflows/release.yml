@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # semantic-release determines the last release by walking tags, and
           # a shallow clone has none of them. Without this it treats every run
