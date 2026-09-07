@@ -24,6 +24,17 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      # Lint and format run before the audit, type-check and tests: they are
+      # the cheapest steps and the likeliest to fail, so failing here gives
+      # quicker feedback than the same failure surfacing after a full suite.
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Check formatting
+        working-directory: backend
+        run: npm run format:check
+
       # Not a bare `npm audit`: that exits 1 both for real advisories and for
       # registry outages. See .github/scripts/audit-deps.mjs.
       - name: Audit dependencies
@@ -33,9 +44,11 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
-      - name: Run tests
+      # `test:coverage`, not `test`: the thresholds in backend/vitest.config.ts
+      # only gate anything if the run that enforces them is the one CI executes.
+      - name: Run tests with coverage
         working-directory: backend
-        run: npm test
+        run: npm run test:coverage
 
   frontend:
     name: Frontend Build & Tests
@@ -55,6 +68,27 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # Same ordering rationale as the backend job: cheapest and most likely to
+      # fail, so it runs before the build and the suite.
+      #
+      # `eslint .` exits 0 on warnings, so the five the frontend currently
+      # reports do not fail this step: four react-hooks/set-state-in-effect
+      # (App.tsx twice, SyncStatus.tsx, useSubscription.ts) tracked in #150,
+      # and one react-refresh/only-export-components in TrendsView.tsx that is
+      # not tracked anywhere yet.
+      #
+      # Leaving them non-fatal is deliberate. Raising set-state-in-effect to
+      # error is #150's job, and wiring lint into CI should not silently import
+      # that decision - the fixes change when a re-render happens in the live
+      # update path, which is not something to land inside a CI plumbing PR.
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Check formatting
+        working-directory: frontend
+        run: npm run format:check
+
       # Not a bare `npm audit`: that exits 1 both for real advisories and for
       # registry outages. See .github/scripts/audit-deps.mjs.
       - name: Audit dependencies
@@ -71,9 +105,13 @@ jobs:
         working-directory: frontend
         run: npm run audit:contrast
 
-      - name: Run tests
+      # `test:coverage` for the same reason as the backend job. #149 predates
+      # the frontend threshold, which landed later in #174, so the issue only
+      # asked for the backend gate here; wiring both is what makes the
+      # thresholds mean anything.
+      - name: Run tests with coverage
         working-directory: frontend
-        run: npm test
+        run: npm run test:coverage
 
   # Secret scanning lives in .github/workflows/secret-scan.yml, which pins and
   # checksum-verifies the scanner and runs on pushes to every branch rather than
