@@ -1,0 +1,132 @@
+name: Lockfile Verify
+
+# Asserts that each project's package-lock.json still agrees with its
+# package.json.
+#
+# ci.yml already runs `npm ci`, but only as a means to an end: it installs so it
+# can type-check, build, and test. That leaves the lockfile itself unwatched in
+# three ways this workflow closes.
+#
+#   1. ci.yml runs on pushes to main and on pull requests. A push to a feature
+#      branch that edits package.json without regenerating the lockfile gets no
+#      signal until a pull request opens. This runs on every branch.
+#   2. ci.yml has no schedule, so a lockfile that breaks without a commit --
+#      a yanked version, a registry integrity mismatch -- stays invisible until
+#      someone happens to push. This runs daily.
+#   3. When ci.yml does catch it, the failure surfaces inside a job named
+#      "Backend Type-Check & Tests", which points at the type-checker or the
+#      suite rather than at the install. This reports under its own name.
+#
+# backend/ and frontend/ are independent npm projects -- two package.json files,
+# two package-lock.json files, no workspace root -- so each is verified on its
+# own rather than from a single install at the repository root.
+
+on:
+  push:
+    # Deliberately unfiltered, matching secret-scan.yml. Drift is cheapest to
+    # fix on the branch that introduced it, while the person who changed the
+    # dependency still has the context; waiting for the pull request moves the
+    # discovery past that point.
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily. The dependency graph can break without anyone committing: a version
+    # is unpublished, a registry entry stops matching the integrity hash the
+    # lockfile pins. Nothing in a commit-triggered workflow notices that, so the
+    # first sign would be a failed install for whoever pushed next.
+    #
+    # Off the hour on purpose. Scheduled jobs bunch up at :00 across GitHub and
+    # get queued behind the crowd.
+    - cron: '17 5 * * *'
+
+# Reads the repository and reports through the job's own status. It writes no
+# comment, label, or commit -- and notably does not regenerate the lockfile --
+# so it needs no write scope.
+permissions:
+  contents: read
+
+concurrency:
+  group: lockfile-verify-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Verify lockfile (${{ matrix.project }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One broken lockfile must not cancel the other project's job. If a change
+      # desynchronised both, the useful report says so, rather than naming
+      # whichever entry happened to fail first and leaving the second unknown.
+      fail-fast: false
+      matrix:
+        project: [backend, frontend]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Only the working tree is inspected, so the default shallow fetch is
+          # enough. Nothing here talks to the API, so leaving a token behind in
+          # .git/config would only widen what a compromised step could reach.
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Tracks ci.yml. Resolution is version-sensitive -- npm's own version
+          # travels with Node -- so verifying under a different runtime than the
+          # one that installs is a way to disagree with CI about a lockfile both
+          # are reading.
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Verify package-lock.json is in sync with package.json
+        working-directory: ${{ matrix.project }}
+        shell: bash
+        # `npm ci` refuses to run when the lockfile cannot satisfy package.json,
+        # and that refusal is the check -- a dependency added, removed, or moved
+        # between dependency groups without regenerating the lockfile fails here.
+        # --dry-run gets the verdict without writing node_modules.
+        #
+        # --ignore-scripts is defence in depth. A dry run installs nothing and so
+        # triggers no lifecycle script, but this workflow runs on pushes to every
+        # branch, and a job reachable from any branch should not be one edit away
+        # from executing a dependency's install hook.
+        #
+        # Worth being precise about what this proves: that the lockfile *can
+        # satisfy* package.json. A lockfile that is merely stale while still
+        # satisfiable -- a version range widened, with the pinned version still
+        # inside it -- passes. Catching that would mean re-resolving against the
+        # registry and diffing, which re-resolves to whatever is newest and would
+        # fail on any day a dependency published a release. That trades a real
+        # signal for a daily false alarm, so this check stops here.
+        run: |
+          set -euo pipefail
+
+          if [ ! -f package-lock.json ]; then
+            echo "::error::${{ matrix.project }}/package-lock.json is missing."
+            echo "Every npm project in this repository commits its lockfile."
+            exit 1
+          fi
+
+          if ! npm ci --dry-run --ignore-scripts; then
+            echo "::error::${{ matrix.project }}/package-lock.json is out of sync with ${{ matrix.project }}/package.json."
+            echo ""
+            echo "npm ci refuses to install when the lockfile cannot satisfy package.json."
+            echo "This usually means a dependency was added, removed, or changed in"
+            echo "package.json without regenerating the lockfile alongside it."
+            echo ""
+            echo "To fix, regenerate the lockfile and commit it with the change:"
+            echo "  cd ${{ matrix.project }}"
+            echo "  npm install"
+            echo "  git add package-lock.json"
+            echo ""
+            echo "Regenerate rather than hand-editing: the lockfile records resolved"
+            echo "versions and integrity hashes that npm derives from the registry."
+            exit 1
+          fi
+
+          echo "${{ matrix.project }}/package-lock.json is in sync with package.json."
