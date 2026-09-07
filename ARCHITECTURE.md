@@ -42,7 +42,7 @@ As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horiz
   - Close time is measured against the ledger that precedes a record **by sequence**, not the newest ledger in the store. With no such predecessor in the window the close time is reported as `null` rather than as a delta against an unrelated ledger — which is what produced close times of around -36,000,000 seconds.
   - Because Horizon does not offer SSE streaming on `/fee_stats`, the backend continues to poll `/fee_stats` on a configurable interval.
 - **WebSocket Broadcast Fan-out:** Instead of multiple browser tabs opening individual SSE connections to public Horizon, the backend terminates the Horizon stream and broadcasts updates over a single WebSocket channel (`/ws`) to all connected frontend clients.
-- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` is fetched separately on its own interval in both modes.
+- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` and `/api/trends` are fetched separately over REST on their own intervals in both modes.
 - **Backward-Compatible REST APIs:** All REST endpoints remain active and continue to serve up-to-date in-memory metrics for external scripts, health probes, and test harnesses.
 
 ## Stack
@@ -220,12 +220,17 @@ boundary without the frontend's data shapes changing.
 ```
 netpulse-xlm/
 ├── .github/
+│   ├── ISSUE_TEMPLATE/
 │   ├── scripts/
 │   │   └── audit-deps.mjs   npm audit wrapper: real advisories fail,
 │   │                        registry outages warn
 │   ├── workflows/
-│   │   ├── ci.yml           backend + frontend + secret scan
-│   │   └── codeql.yml       static analysis
+│   │   ├── ci.yml           backend + frontend build, audit, and tests
+│   │   ├── codeql.yml       CodeQL static analysis
+│   │   ├── lockfile-verify.yml asserts package-lock.json matches package.json
+│   │   ├── release.yml      semantic-release on [release] commit marker
+│   │   └── secret-scan.yml  pinned and verified Gitleaks scanner
+│   ├── dependabot.yml       version updates for npm and GitHub Actions
 │   └── pull_request_template.md
 ├── docs/
 │   └── API.md               REST + WebSocket reference for consumers
@@ -264,7 +269,7 @@ netpulse-xlm/
     │   ├── useQueryParam.ts   URL-backed state (network, history + trend range)
     │   ├── useTheme.ts        light/dark theme preference
     │   ├── format.ts          number/duration formatting helpers
-    │   ├── components/        stat tiles, charts, history view,
+    │   ├── components/        stat tiles, charts, history & trends views,
     │   │                      error boundary, theme toggle
     │   └── styles.css
     ├── index.html

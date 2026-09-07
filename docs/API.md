@@ -1,6 +1,6 @@
 # NetPulse API Reference
 
-The NetPulse backend exposes seven HTTP routes and one WebSocket channel. It is
+The NetPulse backend exposes eight HTTP routes and one WebSocket channel. It is
 a read-only view over Stellar network telemetry that the backend collects from
 Horizon, aggregates in memory, and persists to SQLite.
 
@@ -46,7 +46,7 @@ list, which matters for [history](#get-apihistory) and
 
 ### The `network` query parameter
 
-Six of the seven routes accept `?network=`. Parsing is a strict equality check:
+Seven of the eight routes accept `?network=`. Parsing is a strict equality check:
 
 ```ts
 req.query.network === "testnet" ? "testnet" : "mainnet"
