@@ -1,0 +1,35 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "esbuild": {
+      "name": "esbuild",
+      "severity": "moderate",
+      "isDirect": false,
+      "range": "<=0.24.2",
+      "via": [
+        {
+          "source": 1102341,
+          "name": "esbuild",
+          "title": "esbuild enables any website to send requests to the dev server",
+          "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+          "severity": "moderate",
+          "range": "<=0.24.2"
+        }
+      ],
+      "effects": [],
+      "nodes": ["node_modules/esbuild"],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 0,
+      "critical": 0,
+      "total": 2
+    },
+    "dependencies": { "prod": 4, "dev": 20, "optional": 0, "total": 24 }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "message": "request to https://registry.npmjs.org/-/npm/v1/security/advisories/bulk failed, reason: connect ETIMEDOUT 104.16.0.35:443"
+}

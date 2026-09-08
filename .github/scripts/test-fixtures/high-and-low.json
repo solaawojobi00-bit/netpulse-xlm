@@ -1,0 +1,54 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "tar-fs": {
+      "name": "tar-fs",
+      "severity": "high",
+      "isDirect": false,
+      "range": ">=2.0.0 <2.1.3",
+      "via": [
+        {
+          "source": 1105444,
+          "name": "tar-fs",
+          "title": "tar-fs can extract outside the specified directory",
+          "url": "https://github.com/advisories/GHSA-pq67-2wwv-3xjx",
+          "severity": "high",
+          "range": ">=2.0.0 <2.1.3"
+        }
+      ],
+      "effects": [],
+      "nodes": ["node_modules/tar-fs"],
+      "fixAvailable": true
+    },
+    "cookie": {
+      "name": "cookie",
+      "severity": "low",
+      "isDirect": false,
+      "range": "<0.7.0",
+      "via": [
+        {
+          "source": 1103907,
+          "name": "cookie",
+          "title": "cookie accepts cookie name/path/domain with out of bounds characters",
+          "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x",
+          "severity": "low",
+          "range": "<0.7.0"
+        }
+      ],
+      "effects": [],
+      "nodes": ["node_modules/cookie"],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 1,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0,
+      "total": 2
+    },
+    "dependencies": { "prod": 10, "dev": 5, "optional": 0, "total": 15 }
+  }
+}

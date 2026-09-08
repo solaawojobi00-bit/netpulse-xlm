@@ -113,6 +113,42 @@ jobs:
         working-directory: frontend
         run: npm run test:coverage
 
+  # `.github/scripts/audit-deps.mjs` is the security gate the two "Audit
+  # dependencies" steps above run. It decides whether an npm audit failure
+  # blocks the build, and to do that it has to tell a real advisory apart from
+  # the registry never answering - two things npm reports with the same exit
+  # code. Getting that wrong in the fail-open direction leaves a gate that
+  # reports green while auditing nothing, which has happened once already
+  # (ENOLOCK misclassified as an outage, caught before merge).
+  #
+  # Its own job rather than a step in the two above: .github/scripts/ belongs to
+  # neither package, so bolting it onto one of them would imply an ownership
+  # that does not exist, and it needs neither package's node_modules. Running in
+  # parallel also means it adds no wall-clock to CI, which matters because the
+  # suite spends ~30s in the script's real retry delays.
+  scripts:
+    name: Audit Script Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # No cache: this job installs nothing. The tests use node:test and a
+          # stub npm on PATH, so there is no lockfile to key a cache on.
+
+      # No `npm ci` anywhere in this job. The suite stubs npm rather than
+      # calling it, so it touches no network and needs no dependencies.
+      #
+      # Not covered by the Lint or Check formatting steps above: those run from
+      # inside backend/ and frontend/, so .github/scripts/ is outside both. See
+      # #180.
+      - name: Run audit-deps regression tests
+        run: node --test .github/scripts/audit-deps.test.mjs
+
   # Secret scanning lives in .github/workflows/secret-scan.yml, which pins and
   # checksum-verifies the scanner and runs on pushes to every branch rather than
   # only the ones that reach CI here.

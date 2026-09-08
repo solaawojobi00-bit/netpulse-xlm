@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "EUSAGE",
+    "summary": "`npm audit` does not support testing workspaces in this configuration.",
+    "detail": ""
+  }
+}
