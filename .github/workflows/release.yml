@@ -67,7 +67,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # semantic-release 25 requires ^22.14.0 || >=24.10.0. Matches ci.yml.
           node-version: 24
