@@ -1,0 +1,7 @@
+{
+  "message": "503 Service Unavailable - POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+  "uri": "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+  "statusCode": 503,
+  "body": "<html><head><title>503 Service Unavailable</title></head></html>",
+  "headers": { "content-type": ["text/html"] }
+}
