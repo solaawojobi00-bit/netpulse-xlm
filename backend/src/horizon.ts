@@ -112,10 +112,30 @@ async function horizonFetch<T>(
   return parsed.data;
 }
 
-export async function fetchRecentLedgers(
+/**
+ * A page of recent ledgers, plus the cursor that resumes immediately after it.
+ *
+ * `newestPagingToken` is deliberately separate from the samples rather than a
+ * field on `LedgerSample`. That type is both the SQLite row shape and the
+ * `/api/ledgers/recent` response shape, so a paging token added to it would
+ * leak an ingestion-layer detail into the persisted schema and the public API
+ * for no consumer that wants it (#109 weighed this explicitly).
+ */
+export interface RecentLedgersPage {
+  samples: LedgerSample[];
+  /**
+   * The paging token of the newest ledger in the page, or `null` when the page
+   * was empty or Horizon omitted the token. Never a ledger sequence: those are
+   * a different kind of identifier, and seeding one as a cursor is what made a
+   * fresh backend stream ledgers from fourteen months earlier (#84).
+   */
+  newestPagingToken: string | null;
+}
+
+async function fetchRecentLedgerPage(
   limit: number,
-  horizonUrl: string = HORIZON_URL,
-): Promise<LedgerSample[]> {
+  horizonUrl: string,
+): Promise<RecentLedgersPage> {
   const data = await horizonFetch(
     `/ledgers?order=desc&limit=${limit}`,
     HorizonLedgersResponseSchema,
@@ -127,7 +147,7 @@ export async function fetchRecentLedgers(
   // next-older ledger, then present oldest-first for charting.
   const chronological = [...records].reverse();
 
-  return chronological.map((record, index): LedgerSample => {
+  const samples = chronological.map((record, index): LedgerSample => {
     const previous = chronological[index - 1];
     const closeTimeSeconds = closeTimeSecondsBetween(
       previous?.closed_at,
@@ -146,6 +166,49 @@ export async function fetchRecentLedgers(
       maxTxSetSize: record.max_tx_set_size,
     };
   });
+
+  /*
+   * `records` is newest-first because the request is `order=desc`, so the
+   * newest ledger is index 0 -- not `.at(-1)`, which is the oldest. Taken from
+   * `records` rather than `chronological` so the ordering assumption is stated
+   * where the response shape is still visible.
+   *
+   * `paging_token` is optional in the schema, so an absent one yields null and
+   * the caller falls back rather than inventing a cursor.
+   */
+  return {
+    samples,
+    newestPagingToken: records[0]?.paging_token ?? null,
+  };
+}
+
+export async function fetchRecentLedgers(
+  limit: number,
+  horizonUrl: string = HORIZON_URL,
+): Promise<LedgerSample[]> {
+  const { samples } = await fetchRecentLedgerPage(limit, horizonUrl);
+  return samples;
+}
+
+/**
+ * As `fetchRecentLedgers`, but also returns the newest ledger's paging token so
+ * a stream can resume from where the page ends instead of from `"now"`.
+ *
+ * One request serves both: fetching the samples and the token separately would
+ * mean two calls with a moving boundary between them, which is the gap this
+ * exists to close rather than a way to close it.
+ *
+ * Verified against the live public endpoint before relying on it, because #109
+ * flagged it as an open question: a `paging_token` taken from `order=desc` is
+ * accepted as a cursor by a subsequent `order=asc` request, and resumes at
+ * exactly the following ledger -- the cursor ledger itself is excluded and the
+ * run is contiguous, so this neither duplicates nor skips.
+ */
+export async function fetchRecentLedgersWithCursor(
+  limit: number,
+  horizonUrl: string = HORIZON_URL,
+): Promise<RecentLedgersPage> {
+  return fetchRecentLedgerPage(limit, horizonUrl);
 }
 
 export async function fetchFeeStats(
