@@ -5,6 +5,7 @@ import type { HorizonLedgerRecord } from "./horizon.js";
 // Mock horizon module before importing poller
 const mockConnectHorizonLedgerStream = vi.fn();
 const mockFetchRecentLedgers = vi.fn();
+const mockFetchRecentLedgersWithCursor = vi.fn();
 const mockFetchFeeStats = vi.fn();
 
 vi.mock("./horizon.js", async () => {
@@ -13,6 +14,8 @@ vi.mock("./horizon.js", async () => {
   return {
     ...actual,
     fetchRecentLedgers: (...args: any[]) => mockFetchRecentLedgers(...args),
+    fetchRecentLedgersWithCursor: (...args: any[]) =>
+      mockFetchRecentLedgersWithCursor(...args),
     fetchFeeStats: (...args: any[]) => mockFetchFeeStats(...args),
     connectHorizonLedgerStream: (...args: any[]) =>
       mockConnectHorizonLedgerStream(...args),
@@ -65,6 +68,26 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
     resetStore("testnet");
 
     mockFetchRecentLedgers.mockReset().mockResolvedValue([mockLedger(100)]);
+    /*
+     * The warm-up calls fetchRecentLedgersWithCursor, not fetchRecentLedgers.
+     * Deriving the samples from the latter keeps the many tests that seed a
+     * warm-up window working through the one mock they already set, while the
+     * token defaults to a realistic value so the path under test by default is
+     * the one production takes. Tests that care about the fallback override
+     * this directly.
+     *
+     * `samples` is chronological, so the newest is the last element.
+     */
+    mockFetchRecentLedgersWithCursor
+      .mockReset()
+      .mockImplementation(async (...args: any[]) => {
+        const samples: LedgerSample[] = await mockFetchRecentLedgers(...args);
+        const newest = samples.at(-1);
+        return {
+          samples,
+          newestPagingToken: newest ? `warmup-token-${newest.sequence}` : null,
+        };
+      });
     mockFetchFeeStats.mockReset().mockResolvedValue(mockFee());
     mockConnectHorizonLedgerStream.mockReset();
   });
@@ -163,17 +186,66 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
   });
 
   describe("Cursor derivation and resume", () => {
+    /** The cursor the stream was opened with on its Nth connection. */
+    const cursorOnCall = (call: number): string =>
+      mockConnectHorizonLedgerStream.mock.calls[call][1];
+
     /*
-     * Horizon's /ledgers?cursor= takes a paging token. Seeding a raw ledger
+     * Horizon's /ledgers?cursor= takes a paging token, and a raw ledger
      * sequence there is what made a freshly started backend stream ledgers
-     * from fourteen months earlier (#84), so the initial cursor is "now"
-     * whether or not the warm-up produced ledgers.
+     * from fourteen months earlier (#84). The invariant is that only a paging
+     * token or the literal "now" ever reaches the cursor.
+     *
+     * Seeding the warm-up's newest token closes the startup gap #84 left open
+     * (#109): with "now", the ledgers closing between the warm-up returning
+     * and the stream opening were delivered by neither.
      */
-    it("seeds the initial cursor with 'now', never a ledger sequence", async () => {
+    it("seeds the initial cursor with the warm-up's newest paging token", async () => {
       mockFetchRecentLedgers.mockResolvedValue([
         mockLedger(100),
         mockLedger(105),
       ]);
+
+      mockConnectHorizonLedgerStream.mockImplementation(async () => {
+        controller.abort();
+      });
+
+      await startStreamForNetwork("mainnet", controller.signal);
+
+      // 105 is the newest of the warm-up window, so its token is the seed.
+      expect(mockConnectHorizonLedgerStream).toHaveBeenCalledWith(
+        expect.any(String),
+        "warmup-token-105",
+        expect.any(Function),
+        controller.signal,
+      );
+    });
+
+    /*
+     * The #84 invariant, asserted against the identifier rather than against a
+     * particular seed value: whatever the cursor is, it must not be a ledger
+     * sequence from the warm-up window.
+     */
+    it("never seeds a ledger sequence as the cursor", async () => {
+      mockFetchRecentLedgers.mockResolvedValue([
+        mockLedger(100),
+        mockLedger(105),
+      ]);
+
+      mockConnectHorizonLedgerStream.mockImplementation(async () => {
+        controller.abort();
+      });
+
+      await startStreamForNetwork("mainnet", controller.signal);
+
+      const cursor = cursorOnCall(0);
+      expect(cursor).not.toBe("105");
+      expect(cursor).not.toBe("100");
+      expect(cursor).not.toMatch(/^\d+$/);
+    });
+
+    it("falls back to 'now' when the warm-up produces no ledgers", async () => {
+      mockFetchRecentLedgers.mockResolvedValue([]);
 
       mockConnectHorizonLedgerStream.mockImplementation(async () => {
         controller.abort();
@@ -189,8 +261,16 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
       );
     });
 
-    it("seeds 'now' when the warm-up produces no ledgers either", async () => {
-      mockFetchRecentLedgers.mockResolvedValue([]);
+    /*
+     * `paging_token` is optional in the Horizon schema. A window of ledgers
+     * whose newest record carries no token gives nothing valid to seed, so the
+     * fallback holds rather than reaching for the sequence beside it.
+     */
+    it("falls back to 'now' when the newest warm-up record carries no paging token", async () => {
+      mockFetchRecentLedgersWithCursor.mockResolvedValue({
+        samples: [mockLedger(100), mockLedger(105)],
+        newestPagingToken: null,
+      });
 
       mockConnectHorizonLedgerStream.mockImplementation(async () => {
         controller.abort();
@@ -198,12 +278,45 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
       await startStreamForNetwork("mainnet", controller.signal);
 
-      expect(mockConnectHorizonLedgerStream).toHaveBeenCalledWith(
-        expect.any(String),
-        "now",
-        expect.any(Function),
-        controller.signal,
+      expect(cursorOnCall(0)).toBe("now");
+    });
+
+    /*
+     * A warm-up failure must not stop the stream starting -- the catch around
+     * it is not bypassed by the seeding change. With no page there is no
+     * token, so this degrades to the previous behaviour rather than to no
+     * stream at all.
+     */
+    it("falls back to 'now' and still streams when the warm-up throws", async () => {
+      mockFetchRecentLedgersWithCursor.mockRejectedValue(
+        new Error("Warm-up failed"),
       );
+
+      mockConnectHorizonLedgerStream.mockImplementation(async () => {
+        controller.abort();
+      });
+
+      await startStreamForNetwork("mainnet", controller.signal);
+
+      expect(mockConnectHorizonLedgerStream).toHaveBeenCalledTimes(1);
+      expect(cursorOnCall(0)).toBe("now");
+    });
+
+    /*
+     * The warm-up fetch and the fee fetch run under one Promise.all, so a fee
+     * failure lands in the same catch and must not cost the ledger cursor any
+     * differently -- it is the whole warm-up that is lost, token included.
+     */
+    it("falls back to 'now' when the fee half of the warm-up throws", async () => {
+      mockFetchFeeStats.mockRejectedValue(new Error("fee_stats down"));
+
+      mockConnectHorizonLedgerStream.mockImplementation(async () => {
+        controller.abort();
+      });
+
+      await startStreamForNetwork("mainnet", controller.signal);
+
+      expect(cursorOnCall(0)).toBe("now");
     });
 
     it("resumes from the last paging_token, and holds it when a record has none", async () => {
@@ -261,7 +374,14 @@ describe("Poller SSE Reconnect and Backoff Unit Tests", () => {
 
       await streamPromise;
 
-      expect(cursorsPassed).toEqual(["now", "token-201", "token-201"]);
+      // First connection seeds from the warm-up (sequence 200's token), then
+      // the stream advances the cursor from the records it receives, holding
+      // the last good token when one arrives without it.
+      expect(cursorsPassed).toEqual([
+        "warmup-token-200",
+        "token-201",
+        "token-201",
+      ]);
     });
   });
 

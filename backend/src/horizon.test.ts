@@ -3,6 +3,7 @@ import {
   connectHorizonLedgerStream,
   fetchFeeStats,
   fetchRecentLedgers,
+  fetchRecentLedgersWithCursor,
   HorizonFeeStatsResponseSchema,
   HorizonLedgerRecordSchema,
   HorizonOperationRecordSchema,
@@ -152,6 +153,122 @@ describe("Horizon Unit Tests", () => {
       expect(feeStats.feeChargedP90).toBe(250);
       expect(feeStats.feeChargedP99).toBe(1000);
       expect(feeStats.fetchedAt).toBeDefined();
+    });
+  });
+
+  /*
+   * The cursor half of the warm-up (#109). These assert on which record's
+   * token is returned, because picking the wrong end of a newest-first
+   * response would seed the stream from the *oldest* ledger of the window and
+   * replay it, which is a plausible mistake that still type-checks.
+   */
+  describe("fetchRecentLedgersWithCursor", () => {
+    const record = (
+      sequence: number,
+      closedAt: string,
+      pagingToken?: string,
+    ): HorizonLedgerRecord => ({
+      ...(pagingToken === undefined ? {} : { paging_token: pagingToken }),
+      sequence,
+      closed_at: closedAt,
+      successful_transaction_count: 1,
+      failed_transaction_count: 0,
+      operation_count: 2,
+      tx_set_operation_count: 2,
+      base_fee_in_stroops: 100,
+      max_tx_set_size: 1000,
+    });
+
+    const mockResponse = (records: HorizonLedgerRecord[]) => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ _embedded: { records } }),
+      });
+    };
+
+    it("returns the newest record's paging token, not the oldest", async () => {
+      // Horizon returns newest-first, so sequence 3 is index 0.
+      mockResponse([
+        record(3, "2026-09-02T12:00:11Z", "token-3"),
+        record(2, "2026-09-02T12:00:06Z", "token-2"),
+        record(1, "2026-09-02T12:00:01Z", "token-1"),
+      ]);
+
+      const page = await fetchRecentLedgersWithCursor(
+        3,
+        "https://horizon-test.example.com",
+      );
+
+      expect(page.newestPagingToken).toBe("token-3");
+      // Samples stay oldest-first, exactly as fetchRecentLedgers presents them.
+      expect(page.samples.map((s) => s.sequence)).toEqual([1, 2, 3]);
+    });
+
+    it("returns the same samples as fetchRecentLedgers for the same response", async () => {
+      const records = [
+        record(3, "2026-09-02T12:00:11Z", "token-3"),
+        record(2, "2026-09-02T12:00:06Z", "token-2"),
+      ];
+
+      mockResponse(records);
+      const page = await fetchRecentLedgersWithCursor(
+        2,
+        "https://horizon-test.example.com",
+      );
+
+      mockResponse(records);
+      const samples = await fetchRecentLedgers(
+        2,
+        "https://horizon-test.example.com",
+      );
+
+      expect(page.samples).toEqual(samples);
+    });
+
+    it("returns null when the newest record carries no paging token", async () => {
+      mockResponse([
+        record(3, "2026-09-02T12:00:11Z"), // newest, no token
+        record(2, "2026-09-02T12:00:06Z", "token-2"),
+      ]);
+
+      const page = await fetchRecentLedgersWithCursor(
+        2,
+        "https://horizon-test.example.com",
+      );
+
+      // Deliberately not "fall back to the next record's token": that would
+      // resume before a ledger already held, replaying it.
+      expect(page.newestPagingToken).toBeNull();
+      expect(page.samples).toHaveLength(2);
+    });
+
+    it("returns null and no samples for an empty response", async () => {
+      mockResponse([]);
+
+      const page = await fetchRecentLedgersWithCursor(
+        5,
+        "https://horizon-test.example.com",
+      );
+
+      expect(page.newestPagingToken).toBeNull();
+      expect(page.samples).toEqual([]);
+    });
+
+    it("never returns a ledger sequence as the token", async () => {
+      mockResponse([
+        record(64345549, "2026-09-02T12:00:11Z", "276362028598165504"),
+      ]);
+
+      const page = await fetchRecentLedgersWithCursor(
+        1,
+        "https://horizon-test.example.com",
+      );
+
+      // A real token is not the sequence: this is the #84 confusion, and the
+      // two are genuinely different magnitudes on live Horizon.
+      expect(page.newestPagingToken).toBe("276362028598165504");
+      expect(page.newestPagingToken).not.toBe("64345549");
+      expect(page.newestPagingToken).not.toBe(String(page.samples[0].sequence));
     });
   });
 

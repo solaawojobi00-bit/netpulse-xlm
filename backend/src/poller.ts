@@ -2,6 +2,7 @@ import {
   HORIZON_URLS,
   fetchFeeStats,
   fetchRecentLedgers,
+  fetchRecentLedgersWithCursor,
   fetchRecentOperations,
   type Network,
 } from "./horizon.js";
@@ -351,12 +352,21 @@ export async function startStreamForNetwork(
   const currentStore = stores[network];
   const url = HORIZON_URLS[network];
 
+  /*
+   * Seeded by the warm-up below when it succeeds. Held outside the try so a
+   * warm-up failure leaves it null and the stream still starts, from "now" --
+   * degrading to the old behaviour rather than not streaming at all.
+   */
+  let warmUpCursor: string | null = null;
+
   // 1. Initial warm-up
   try {
-    const [initialLedgers, initialFees] = await Promise.all([
-      fetchRecentLedgers(LEDGERS_PER_POLL, url),
+    const [initialPage, initialFees] = await Promise.all([
+      fetchRecentLedgersWithCursor(LEDGERS_PER_POLL, url),
       fetchFeeStats(url),
     ]);
+    const initialLedgers = initialPage.samples;
+    warmUpCursor = initialPage.newestPagingToken;
     currentStore.setLedgers(initialLedgers);
     currentStore.addFeeSnapshot(initialFees);
     db.insertLedgers(network, initialLedgers);
@@ -374,20 +384,32 @@ export async function startStreamForNetwork(
   }
 
   /*
-   * Horizon's /ledgers?cursor= expects a paging token. This previously seeded
-   * the newest stored ledger's *sequence*, which is a different kind of
-   * identifier — Horizon reinterprets it, and a freshly started backend was
-   * observed streaming ledgers from fourteen months earlier alongside current
-   * ones (#84).
+   * Horizon's /ledgers?cursor= expects a paging token. This once seeded the
+   * newest stored ledger's *sequence*, which is a different kind of identifier
+   * — Horizon reinterprets it, and a freshly started backend was observed
+   * streaming ledgers from fourteen months earlier alongside current ones
+   * (#84). That invariant still holds: the only values that reach `cursor` are
+   * a Horizon paging token or the literal "now".
    *
-   * "now" is the only correct seed available here: the warm-up above returns
-   * LedgerSample, which does not carry a paging token. The loop below advances
-   * the cursor from record.paging_token, so every reconnect after the first
-   * resumes from a real token. The cost is a possible gap of the ledgers that
-   * closed between the warm-up and the stream opening — a few seconds at
-   * process start, against months of wrong data before.
+   * Seeding the warm-up's newest paging token closes the gap #84 documented
+   * and left open. With "now", the ledgers that closed between the warm-up
+   * returning and the SSE connection opening were delivered by neither: the
+   * warm-up had already been taken, and the stream started after them. One or
+   * two ledgers per process start per network, absent from SQLite and so
+   * undercounted in the daily rollup for that day — which #87 keeps
+   * indefinitely after the raw rows behind it are pruned, making the
+   * undercount permanent.
+   *
+   * A token from `order=desc` is valid for the `order=asc` stream: it resumes
+   * at exactly the next ledger, excluding the cursor ledger itself, so this
+   * neither duplicates nor skips. #109 raised that as an open question and it
+   * was verified against the live endpoint rather than assumed.
+   *
+   * "now" remains the fallback for the two cases where no token is available:
+   * the warm-up failed or returned nothing, or Horizon omitted the token.
+   * Those keep the previous behaviour, gap included, rather than failing.
    */
-  let cursor = "now";
+  let cursor = warmUpCursor ?? "now";
   let backoffDelay = 1000;
 
   const { connectHorizonLedgerStream, recordToSample } =

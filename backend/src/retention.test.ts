@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockRollupAndPrune = vi.fn();
 const mockConnectHorizonLedgerStream = vi.fn();
 const mockFetchRecentLedgers = vi.fn();
+const mockFetchRecentLedgersWithCursor = vi.fn();
 const mockFetchFeeStats = vi.fn();
 const mockFetchRecentOperations = vi.fn();
 
@@ -37,6 +38,12 @@ vi.mock("./horizon.js", async () => {
   return {
     ...actual,
     fetchRecentLedgers: (...args: any[]) => mockFetchRecentLedgers(...args),
+    // The startup warm-up calls this one, not fetchRecentLedgers. Leaving it
+    // unmocked lets the real implementation reach the network and leaves a
+    // pending fetch behind, which surfaces here as a timer that stop() cannot
+    // clear.
+    fetchRecentLedgersWithCursor: (...args: any[]) =>
+      mockFetchRecentLedgersWithCursor(...args),
     fetchFeeStats: (...args: any[]) => mockFetchFeeStats(...args),
     fetchRecentOperations: (...args: any[]) =>
       mockFetchRecentOperations(...args),
@@ -85,6 +92,9 @@ describe("Retention scheduling", () => {
 
     mockRollupAndPrune.mockReset();
     mockFetchRecentLedgers.mockReset().mockResolvedValue([]);
+    mockFetchRecentLedgersWithCursor
+      .mockReset()
+      .mockResolvedValue({ samples: [], newestPagingToken: null });
     mockFetchFeeStats.mockReset().mockResolvedValue(null);
     mockFetchRecentOperations.mockReset().mockResolvedValue([]);
 
