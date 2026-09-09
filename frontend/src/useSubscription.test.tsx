@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HealthResponse, LedgerSample } from "./api";
+import type { HealthResponse, LedgerSample, Network } from "./api";
 import { useSubscription } from "./useSubscription";
 
 /*
@@ -169,5 +169,94 @@ describe("useSubscription snapshot handling", () => {
 
     await waitFor(() => expect(FakeWebSocket.last).not.toBeNull());
     expect(result.current.health).toBeNull();
+  });
+});
+
+/*
+ * `isStreaming` is tagged with the network it describes (#150). What that buys
+ * is below: the flag cannot outlive the socket it came from, which is also
+ * what let the socket-construction `catch` stop writing state synchronously
+ * from the effect body.
+ */
+describe("useSubscription streaming state", () => {
+  it("reports streaming once the socket for the current network opens", async () => {
+    const { result } = renderHook(() => useSubscription("mainnet"));
+
+    expect(result.current.isStreaming).toBe(false);
+
+    act(() => {
+      FakeWebSocket.last?.onopen?.();
+    });
+
+    await waitFor(() => expect(result.current.isStreaming).toBe(true));
+  });
+
+  /*
+   * The regression this guards. Switching network tears the old socket down
+   * and opens a new one, but nothing calls `onclose` on a socket whose
+   * handlers were just detached — so a flag stored as a bare boolean stayed
+   * `true` and claimed a live stream for a network whose socket had not
+   * opened yet.
+   */
+  it("stops reporting streaming the moment the network changes", async () => {
+    const { result, rerender } = renderHook(
+      ({ network }: { network: Network }) => useSubscription(network),
+      { initialProps: { network: "mainnet" satisfies Network } },
+    );
+
+    act(() => {
+      FakeWebSocket.last?.onopen?.();
+    });
+    await waitFor(() => expect(result.current.isStreaming).toBe(true));
+
+    rerender({ network: "testnet" as const });
+
+    // Asserted with no waiting: the new network's socket has been constructed
+    // but has not opened, so there is no moment at which this reads true.
+    expect(result.current.isStreaming).toBe(false);
+
+    act(() => {
+      FakeWebSocket.last?.onopen?.();
+    });
+    await waitFor(() => expect(result.current.isStreaming).toBe(true));
+  });
+
+  it("clears streaming when the socket closes", async () => {
+    const { result } = renderHook(() => useSubscription("mainnet"));
+
+    act(() => {
+      FakeWebSocket.last?.onopen?.();
+    });
+    await waitFor(() => expect(result.current.isStreaming).toBe(true));
+
+    act(() => {
+      FakeWebSocket.last?.onclose?.();
+    });
+
+    await waitFor(() => expect(result.current.isStreaming).toBe(false));
+  });
+
+  it("falls back to polling without reporting streaming when the socket cannot be constructed", async () => {
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        constructor() {
+          throw new Error("blocked");
+        }
+      },
+    );
+
+    const { result } = renderHook(() => useSubscription("mainnet"));
+
+    expect(result.current.isStreaming).toBe(false);
+
+    /*
+     * The `catch` writes no state at all now, so the proof that it ran is the
+     * fallback poll: every stubbed REST call rejects, and only the poll path
+     * surfaces that as `error`. The mount-time fetches swallow their own
+     * failures silently.
+     */
+    await waitFor(() => expect(result.current.error).toBe("REST unavailable"));
+    expect(result.current.isStreaming).toBe(false);
   });
 });

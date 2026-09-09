@@ -60,20 +60,21 @@ export default tseslint.config(
       ],
 
       /*
-       * Warn rather than error, deliberately and temporarily. Three call sites
-       * trip this today: App.tsx clearing history state when the network or
-       * range changes, SyncStatus re-basing its clock when new props arrive,
-       * and useSubscription's socket-construction catch.
+       * Error, as of #150. This was a warning while three call sites still
+       * tripped it -- App.tsx clearing history state on a network or range
+       * change, SyncStatus re-basing its clock on new props, and
+       * useSubscription's socket-construction catch. All three are gone: the
+       * first two now tag state with the identity it belongs to and re-anchor
+       * during render, and the third had nothing left to reset once its state
+       * was tagged by network.
        *
-       * All three are the "reset state when a prop changes" pattern, and the
-       * real fixes (a `key`, or deriving during render) each change when a
-       * re-render happens in the live-update path -- get one wrong and the
-       * dashboard shows a stale reading while looking perfectly healthy.
-       * That is not a change to make blind inside the PR that introduces the
-       * linter, so the rule reports without blocking and the sites are tracked
-       * separately. Raise this to "error" once they are fixed.
+       * Worth keeping at error rather than back at warn, because the failure
+       * this rule points at is invisible: a cascading render in the
+       * live-update path shows a stale reading while the dashboard looks
+       * perfectly healthy. The fix is never mechanical, so catching the next
+       * one at the point it is written is much cheaper than finding it later.
        */
-      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/set-state-in-effect": "error",
 
       "@typescript-eslint/no-unused-vars": [
         "error",

@@ -97,37 +97,78 @@ export function App() {
   const { theme, toggleTheme } = useTheme();
   const { health, ledgers, feeSnapshots, soroban, operationBreakdown, error } =
     useSubscription(network);
-  // null until the first fetch resolves, so HistoryView can tell "still
-  // loading" apart from "loaded and empty".
-  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[] | null>(
-    null,
-  );
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  // Trends carry their own points and error, kept apart from history's for the
-  // same reason history is kept apart from the live socket: one failing source
-  // must not blank the others.
-  const [trendPoints, setTrendPoints] = useState<TrendPoint[] | null>(null);
-  const [trendsError, setTrendsError] = useState<string | null>(null);
+  /*
+   * Both fetched results carry the identity they were fetched for, and are
+   * read back only while that identity still matches what the controls say.
+   *
+   * This replaces clearing the state from inside the effect. Clearing worked
+   * only after the effect ran, so the render in between — the one that already
+   * had the new `range` but still the old points — painted the old series
+   * under the new label, which is the exact thing the clearing existed to
+   * prevent, one frame wide. Comparing the tag instead makes it structural: a
+   * result for a range you are no longer viewing is unreachable, so there is
+   * no window in which it can be shown, and no reset render pass either (#150).
+   *
+   * `null` (no tagged result yet) is what tells HistoryView "still loading"
+   * apart from "loaded and empty" — the same distinction the previous
+   * `HistoryPoint[] | null` carried.
+   *
+   * Trends are tagged separately from history for the same reason they always
+   * had their own points and error: one failing source must not blank another.
+   */
+  const [historyResult, setHistoryResult] = useState<{
+    network: Network;
+    range: HistoryRange;
+    points: HistoryPoint[] | null;
+    error: string | null;
+  } | null>(null);
+  const [trendResult, setTrendResult] = useState<{
+    network: Network;
+    range: TrendRange;
+    points: TrendPoint[] | null;
+    error: string | null;
+  } | null>(null);
+
+  const activeHistory =
+    historyResult?.network === network && historyResult.range === range
+      ? historyResult
+      : null;
+  const historyPoints = activeHistory?.points ?? null;
+  const historyError = activeHistory?.error ?? null;
+
+  const activeTrends =
+    trendResult?.network === network && trendResult.range === trendRange
+      ? trendResult
+      : null;
+  const trendPoints = activeTrends?.points ?? null;
+  const trendsError = activeTrends?.error ?? null;
 
   useEffect(() => {
     let cancelled = false;
-    // Switching network or range discards the previous result rather than
-    // showing it under the new label while the fetch is in flight.
-    setHistoryPoints(null);
-    setHistoryError(null);
 
     function loadHistory() {
       fetchHistory(network, range)
         .then((res) => {
           if (cancelled) return;
-          setHistoryPoints(res.points);
-          setHistoryError(null);
+          setHistoryResult({ network, range, points: res.points, error: null });
         })
         .catch((err: unknown) => {
           // Previously swallowed, which made a failing history fetch
           // indistinguishable from a quiet one.
           if (cancelled) return;
-          setHistoryError(err instanceof Error ? err.message : String(err));
+          // A failed *refresh* keeps the last good series and shows the error
+          // beside it, rather than blanking a chart that was fine a moment
+          // ago. `prev` is only reused when it belongs to this same
+          // network/range, so this cannot resurrect another view's data.
+          setHistoryResult((prev) => ({
+            network,
+            range,
+            points:
+              prev?.network === network && prev.range === range
+                ? prev.points
+                : null,
+            error: err instanceof Error ? err.message : String(err),
+          }));
         });
     }
     loadHistory();
@@ -140,22 +181,29 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    // Same discard-on-change rule as history: showing the old 90d series under
-    // a "1y" heading while the new fetch is in flight would be a chart that
-    // disagrees with its own label.
-    setTrendPoints(null);
-    setTrendsError(null);
 
     function loadTrends() {
       fetchTrends(network, trendRange)
         .then((res) => {
           if (cancelled) return;
-          setTrendPoints(res.points);
-          setTrendsError(null);
+          setTrendResult({
+            network,
+            range: trendRange,
+            points: res.points,
+            error: null,
+          });
         })
         .catch((err: unknown) => {
           if (cancelled) return;
-          setTrendsError(err instanceof Error ? err.message : String(err));
+          setTrendResult((prev) => ({
+            network,
+            range: trendRange,
+            points:
+              prev?.network === network && prev.range === trendRange
+                ? prev.points
+                : null,
+            error: err instanceof Error ? err.message : String(err),
+          }));
         });
     }
     loadTrends();
@@ -355,7 +403,16 @@ export function App() {
       */}
       <footer className="app__footer">
         {health && (
+          /*
+            Keyed on the two values SyncStatus anchors its clock to, so a new
+            reading remounts it and its initialisers re-anchor. It used to
+            re-base itself from an effect, which ran a commit later than the
+            render that already had the new props (#150). Remounting is free
+            here — the component is one span with no animation, transition or
+            focusable child, so there is nothing to interrupt.
+          */
           <SyncStatus
+            key={`${health.lastUpdated ?? ""}|${health.secondsSinceLastUpdate ?? ""}`}
             lastUpdated={health.lastUpdated}
             secondsSinceLastUpdate={health.secondsSinceLastUpdate}
             status={health.status}

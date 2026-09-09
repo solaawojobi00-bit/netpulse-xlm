@@ -54,7 +54,23 @@ export function useSubscription(network: Network): SubscriptionData {
   const [operationBreakdown, setOperationBreakdown] =
     useState<OperationBreakdownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  /*
+   * Tagged with the network it describes, for the same reason App tags its
+   * fetched results (#150). The socket for the previous network is torn down
+   * on a switch, but the last state it reported would otherwise outlive it and
+   * read as "streaming" for a network whose socket is not open yet.
+   *
+   * Deriving through the tag is what lets the construction-failure path below
+   * stop writing state synchronously from the effect body: a network with no
+   * socket yet has no streaming state to reset, so the `catch` has nothing to
+   * correct and can simply start the fallback poll.
+   */
+  const [streamState, setStreamState] = useState<{
+    network: Network;
+    streaming: boolean;
+  }>({ network, streaming: false });
+
+  const isStreaming = streamState.network === network && streamState.streaming;
 
   /*
    * Read from the socket handler and the poll loop, both of which fire long
@@ -116,7 +132,7 @@ export function useSubscription(network: Network): SubscriptionData {
 
       ws.onopen = () => {
         if (cancelled) return;
-        setIsStreaming(true);
+        setStreamState({ network, streaming: true });
         ws?.send(JSON.stringify({ type: "setNetwork", network }));
       };
 
@@ -150,7 +166,7 @@ export function useSubscription(network: Network): SubscriptionData {
 
       ws.onerror = () => {
         if (cancelled) return;
-        setIsStreaming(false);
+        setStreamState({ network, streaming: false });
         if (!fallbackTimer) {
           void pollFallback();
         }
@@ -158,13 +174,18 @@ export function useSubscription(network: Network): SubscriptionData {
 
       ws.onclose = () => {
         if (cancelled) return;
-        setIsStreaming(false);
+        setStreamState({ network, streaming: false });
         if (!fallbackTimer) {
           void pollFallback();
         }
       };
     } catch {
-      setIsStreaming(false);
+      /*
+       * No state write here: `streamState` is still tagged with whatever
+       * network last had an open socket, and this network is not it, so
+       * `isStreaming` already derives false. Falling straight through to the
+       * poll is the whole handler.
+       */
       void pollFallback();
     }
 

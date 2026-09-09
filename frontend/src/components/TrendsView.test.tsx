@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { TrendPoint } from "../api";
 import { TREND_RANGES } from "../api";
-import { TrendsView, formatTrendDate } from "./TrendsView";
+import { TrendsView } from "./TrendsView";
+import { formatTrendDate } from "./trendDate";
 
 const mockPoints: TrendPoint[] = [
   {

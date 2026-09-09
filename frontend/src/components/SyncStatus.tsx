@@ -11,19 +11,29 @@ export function SyncStatus({
   secondsSinceLastUpdate,
   status = "ok",
 }: SyncStatusProps) {
-  const [snapshot, setSnapshot] = useState(() => ({
-    receivedAt: Date.now(),
+  /*
+   * `baseSeconds` is the backend's own count and `receivedAt` is when it
+   * reached this client. Both are needed: ticking from `lastUpdated` alone
+   * would measure against the *client* clock, so any skew between the two
+   * machines would show up as a wrong "synced Ns ago". Anchoring on the
+   * server's number and ticking locally from arrival keeps the reading
+   * server-authoritative, and re-anchoring on each frame that lands
+   * re-corrects the local drift.
+   *
+   * Re-anchoring is a remount, driven by the `key` App gives this component
+   * (#150). There used to be an effect here that re-based both values when
+   * the props changed; it fired after React had already committed a render
+   * pairing the new props with the stale anchor, so the corrected figure was
+   * always one committed pass behind. A `key` covering the same two props
+   * discards the whole component instead, which is what these initialisers
+   * are for — and it is the only place a clock may be read, since
+   * `react-hooks` rightly rejects `Date.now()` during render.
+   */
+  const [anchor] = useState(() => ({
     baseSeconds: secondsSinceLastUpdate,
+    receivedAt: Date.now(),
   }));
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    setSnapshot({
-      receivedAt: Date.now(),
-      baseSeconds: secondsSinceLastUpdate,
-    });
-    setNow(Date.now());
-  }, [lastUpdated, secondsSinceLastUpdate]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -42,9 +52,9 @@ export function SyncStatus({
     : lastUpdated;
 
   let elapsed: number;
-  if (snapshot.baseSeconds !== null && snapshot.baseSeconds !== undefined) {
-    const clientElapsed = (now - snapshot.receivedAt) / 1000;
-    elapsed = Math.max(0, Math.floor(snapshot.baseSeconds + clientElapsed));
+  if (anchor.baseSeconds !== null && anchor.baseSeconds !== undefined) {
+    const clientElapsed = (now - anchor.receivedAt) / 1000;
+    elapsed = Math.max(0, Math.floor(anchor.baseSeconds + clientElapsed));
   } else if (!Number.isNaN(parsedTime)) {
     elapsed = Math.max(0, Math.floor((now - parsedTime) / 1000));
   } else {

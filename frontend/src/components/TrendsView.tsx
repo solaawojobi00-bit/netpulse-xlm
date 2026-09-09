@@ -12,24 +12,7 @@ import { ChartCard, resolveChartStatus } from "./ChartCard";
 import { describeSeries } from "./chartSummary";
 import { axisStroke, axisTick, chartA11y, tooltipProps } from "./chartTheme";
 import { SegmentedControl } from "./SegmentedControl";
-
-/**
- * Formats a `YYYY-MM-DD` UTC day for the X axis.
- *
- * The explicit `T00:00:00Z` and `timeZone: "UTC"` are both load-bearing.
- * `new Date("2026-09-01")` is parsed as UTC midnight but *rendered* in local
- * time, so west of Greenwich every label would slip to the previous day — a
- * chart quietly mislabelled by one day, which is far worse than an obviously
- * broken one. Exported so that behaviour is testable: Recharts renders nothing
- * at jsdom's zero width, so an axis label cannot be asserted through the DOM.
- */
-export function formatTrendDate(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
+import { formatTrendDate } from "./trendDate";
 
 interface Props {
   /** null until the first trends fetch resolves. */
