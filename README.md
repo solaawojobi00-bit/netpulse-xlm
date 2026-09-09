@@ -239,6 +239,51 @@ the status code — see
 a response stale, how it relates to `secondsSinceLastUpdate`, and the full
 field-by-field reference.
 
+## Diagnostics
+
+### Checking for missing ledger data
+
+`backend/scripts/rollup-gap-check.mjs` reports how much ledger data is absent
+from a database and how much of that loss is already permanent.
+
+```bash
+# a local database (defaults to $DATABASE_PATH, else ./data/netpulse.db)
+node backend/scripts/rollup-gap-check.mjs
+
+# an explicit path, e.g. on a deployment host
+node backend/scripts/rollup-gap-check.mjs /var/lib/netpulse/netpulse.db
+
+# machine-readable
+node backend/scripts/rollup-gap-check.mjs --json
+```
+
+It reports two things: gaps in the `ledgers` sequence per network, with the size
+of each gap, and any `daily_rollups` rows whose raw rows have already been
+pruned. The second set is the one that matters — daily totals are sums, so a
+missing ledger is an undercount, and once the raw rows behind a day are deleted
+at the retention boundary that undercount can no longer be recomputed.
+
+Gap **size** is the diagnosis. One or two missing ledgers is the warm-up to
+stream cursor handoff; runs longer than the 20-ledger warm-up window are
+downtime that nothing backfilled.
+
+**Safe to run against a live production database.** The connection is opened
+read-only, so it cannot write to the file or block the backend. The database
+runs in WAL mode, which gives readers a consistent snapshot without blocking the
+writer, so no downtime or maintenance window is needed. And `rollupAndPrune()`
+does its rollup and delete in a single transaction, so a read landing mid-prune
+sees either the whole before state or the whole after state, never a half-pruned
+day.
+
+If you would rather analyse a copy, copy `netpulse.db`, `netpulse.db-wal` **and**
+`netpulse.db-shm` together. Copying only the first gives a snapshot missing every
+commit still in the WAL, which reads as data loss that is not real.
+
+Finding gaps is not an error: the script exits 0 whatever it reports, and
+non-zero only if the database cannot be read. A database with no `daily_rollups`
+table predates that feature, which the script reports plainly — no rollups means
+nothing has frozen yet.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

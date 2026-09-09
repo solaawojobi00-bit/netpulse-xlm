@@ -65,6 +65,35 @@ export default tseslint.config(
     },
   },
 
+  /*
+   * Standalone operational scripts under `scripts/`, matching the convention
+   * the rest of the repo already uses for these (`.github/scripts/`,
+   * `frontend/scripts/`): plain `.mjs`, run by node directly, outside
+   * tsconfig's `src` include and therefore outside the type-checked rules
+   * above.
+   *
+   * They need Node globals declared. `js.configs.recommended` applies
+   * `no-undef` to every file, and the `.ts` files escape it only because
+   * typescript-eslint switches that rule off for TypeScript, where tsc already
+   * covers it. Without this block `console` and `process` are 18 errors.
+   *
+   * Declared inline rather than via the `globals` package. That package is not
+   * in this package's tree, and pulling a dependency in to name two
+   * identifiers is a poor trade -- particularly for a lint config, where the
+   * cost lands in the lockfile of the package that carries the audit gate. Add
+   * the entries a new script actually needs; do not reach for `globals.node`
+   * to cover globals nothing here uses.
+   */
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+  },
+
   {
     files: ["src/**/*.test.ts"],
     rules: {
