@@ -146,6 +146,61 @@ occur without one, while anything outside a browser can set the header to
 whatever it likes. Blocking origin-less clients would therefore break
 legitimate tooling without stopping an attacker.
 
+## Deploying to Render
+
+`render.yaml` at the repository root is a Render Blueprint describing the
+backend as a single web service. It sets `rootDir: backend`, builds with
+`npm ci --include=dev && npm run build`, starts with `npm start`, and uses the
+existing `/healthz` route as its health check.
+
+No application code is Render-specific. The server already reads `PORT` from
+the environment and binds the unspecified address, and `/ws` shares that one
+port with the REST API, so the service needs no code changes to run there.
+
+### First deploy
+
+1. In the Render dashboard, choose **New → Blueprint** and connect this
+   repository. Render reads `render.yaml` and proposes the `netpulse-backend`
+   service.
+2. When prompted for **`CORS_ORIGIN`**, enter the frontend's origin — for
+   example `https://netpulse.vercel.app`. It accepts a comma-separated list,
+   and the formats are described under [Allowed Origins](#allowed-origins).
+   Getting this wrong does not break the REST API in an obvious way, but the
+   browser's WebSocket handshake is refused with `403`, so the dashboard loads
+   and then never receives live updates.
+3. Deploy. The first build compiles TypeScript and takes a few minutes.
+4. Confirm the service is up:
+
+   ```bash
+   curl https://<your-service>.onrender.com/healthz
+   # {"status":"ok"}
+   ```
+
+To change `CORS_ORIGIN` later — when the frontend's domain is settled, say —
+edit it under the service's **Environment** tab. Render redeploys on save.
+
+### Instance type
+
+The Blueprint specifies the **Starter** instance type rather than Free. Free
+instances spin down after roughly 15 minutes without traffic, and this backend
+is a long-running poller: spin-down halts Horizon ingestion and disconnects
+every WebSocket client, so the dashboard goes stale rather than merely slow.
+
+### Database persistence
+
+⚠️ SQLite runs on **ephemeral storage**. The database survives restarts within
+a deploy, but **each redeploy starts from an empty database**.
+
+Recent data repopulates within a poll interval or two, so the dashboard's live
+view recovers quickly. The longer `/api/trends` ranges do not: `30d`, `90d`,
+and especially `1y` need history that ephemeral storage never accumulates.
+
+Attaching a Render persistent disk would fix this — set `DATABASE_PATH` to a
+path on the mounted volume, which `db.ts` will create — but a disk requires a
+paid instance and forces single-instance deploys with no zero-downtime
+rollout. That tradeoff is tracked as a separate decision rather than assumed
+here.
+
 ## History Export
 
 `GET /api/history` serves aggregated 5-minute buckets, and accepts an optional

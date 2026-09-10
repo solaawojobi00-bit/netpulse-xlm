@@ -1,0 +1,62 @@
+# Render Blueprint for the NetPulse backend.
+#
+# Render only auto-discovers a Blueprint at the repository root, so this file
+# lives here rather than in backend/. `rootDir` scopes every command below to
+# backend/, which is clean because there is no root package.json or workspace:
+# backend/ is standalone with its own lockfile.
+#
+# See "Deploying to Render" in README.md for the manual dashboard steps.
+
+services:
+  - type: web
+    name: netpulse-backend
+    runtime: node
+    rootDir: backend
+
+    # Starter rather than Free deliberately. The free instance type spins down
+    # after roughly 15 minutes without traffic, and this service is a
+    # long-running Horizon poller that writes ledger history to SQLite —
+    # spin-down stops ingestion and drops every connected WebSocket client.
+    plan: starter
+
+    # `--include=dev` is explicit because the build needs TypeScript, which is
+    # a devDependency, and NODE_ENV=production below can otherwise cause npm to
+    # omit dev dependencies and leave `tsc` missing at build time.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+
+    # Existing route in backend/src/index.ts; returns 200 {"status":"ok"}.
+    healthCheckPath: /healthz
+
+    envVars:
+      # Pinned to the version CI runs. package.json `engines` also permits
+      # >=26, but better-sqlite3 is a native module that depends on prebuilt
+      # binaries, and 24 is the version this lockfile is proven against.
+      - key: NODE_VERSION
+        value: "24"
+
+      # Express omits error stack traces from responses in production.
+      - key: NODE_ENV
+        value: production
+
+      # Origins allowed to call the REST API and to open the /ws WebSocket.
+      # `sync: false` makes Render prompt for the value at deploy time instead
+      # of committing a domain here. Set it to the frontend's origin once that
+      # is known; see "Allowed Origins" in README.md for the accepted formats.
+      - key: CORS_ORIGIN
+        sync: false
+
+# Not configured here, on purpose:
+#
+# - No `disk:`. SQLite therefore lives on ephemeral storage at the default
+#   ./data/netpulse.db and is discarded on every redeploy. Whether to attach a
+#   persistent disk is tracked separately — a disk requires a paid instance and
+#   forces single-instance deploys with no zero-downtime rollout, so it is a
+#   deliberate decision rather than a default.
+#
+# - No `region`. Render defaults to Oregon; pick another in the dashboard if
+#   latency to Horizon or to the frontend's region matters.
+#
+# - HORIZON_URL, POLL_INTERVAL_MS, LOG_LEVEL, SHUTDOWN_TIMEOUT_MS and
+#   DATABASE_PATH are all omitted because their in-code defaults are already
+#   correct for this deployment. See backend/.env.example to override any.
