@@ -13,11 +13,23 @@ services:
     runtime: node
     rootDir: backend
 
-    # Starter rather than Free deliberately. The free instance type spins down
-    # after roughly 15 minutes without traffic, and this service is a
-    # long-running Horizon poller that writes ledger history to SQLite —
-    # spin-down stops ingestion and drops every connected WebSocket client.
-    plan: starter
+    # Free, chosen on cost. The technical case for a paid instance is real and
+    # unchanged: this is a long-running Horizon poller, and a Free instance
+    # spins down after roughly 15 minutes without inbound traffic, which stops
+    # ingestion and drops every connected WebSocket client. It spins back up on
+    # the next HTTP request or WebSocket connection, taking about a minute.
+    #
+    # So ingestion is not continuous, and a visitor arriving at a cold service
+    # waits out the spin-up before seeing anything. The live view still works,
+    # which is what the dashboard is for. Nothing in backend/src/ handles this
+    # specially and nothing needs to: the poller reconnects to Horizon with
+    # backoff at start-up, and the frontend falls back to REST polling whenever
+    # the socket is unavailable.
+    #
+    # Note also the workspace-wide allowance of 750 Free instance-hours per
+    # month. A calendar month is about 730 hours, so one continuously-awake
+    # service fits — but only one.
+    plan: free
 
     # `--include=dev` is explicit because the build needs TypeScript, which is
     # a devDependency, and NODE_ENV=production below can otherwise cause npm to
@@ -48,11 +60,11 @@ services:
 
 # Not configured here, on purpose:
 #
-# - No `disk:`. SQLite therefore lives on ephemeral storage at the default
-#   ./data/netpulse.db and is discarded on every redeploy. Whether to attach a
-#   persistent disk is tracked separately — a disk requires a paid instance and
-#   forces single-instance deploys with no zero-downtime rollout, so it is a
-#   deliberate decision rather than a default.
+# - No `disk:`. Free instances cannot attach one, so SQLite lives on ephemeral
+#   storage at the default ./data/netpulse.db and is discarded whenever the
+#   service restarts or spins down. The consequence is that the `/api/trends`
+#   30d, 90d and 1y ranges never populate. Revisiting this needs a paid
+#   instance first; see #188.
 #
 # - No `region`. Render defaults to Oregon; pick another in the dashboard if
 #   latency to Horizon or to the frontend's region matters.
