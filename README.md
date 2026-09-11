@@ -181,25 +181,51 @@ edit it under the service's **Environment** tab. Render redeploys on save.
 
 ### Instance type
 
-The Blueprint specifies the **Starter** instance type rather than Free. Free
-instances spin down after roughly 15 minutes without traffic, and this backend
-is a long-running poller: spin-down halts Horizon ingestion and disconnects
-every WebSocket client, so the dashboard goes stale rather than merely slow.
+The Blueprint specifies the **Free** instance type, chosen on cost. Be aware of
+what that means in practice:
+
+| | Free instance |
+|---|---|
+| Spins down | after roughly **15 minutes** without inbound traffic |
+| Spins back up | on the next HTTP request or WebSocket connection, taking about **a minute** |
+| Persistent disk | **not available** |
+| Allowance | **750 instance-hours per month**, workspace-wide; past that, Free services suspend until the next calendar month |
+
+The technical argument against Free is real and unchanged — this backend is a
+long-running Horizon poller, so spin-down halts ingestion and disconnects every
+WebSocket client. The practical effect is that **ingestion is not continuous**,
+and someone opening a cold dashboard waits out the spin-up before any data
+appears. The live view still works once warm, which is what the dashboard is
+for.
+
+⚠️ The first request after an idle period taking about a minute is the spin-up,
+**not a fault**. Likewise `/api/health` reporting `"stale"` immediately after a
+cold start is expected, and clears within a poll interval or two.
+
+No application code handles this specially, and none needs to: the poller
+reconnects to Horizon with backoff at start-up, and the frontend falls back to
+polling `/api/*` whenever the socket is unavailable.
+
+Moving to a paid instance is a dashboard change (**Settings → Instance Type**)
+plus updating `plan:` in `render.yaml` to match, so the Blueprint does not
+revert it on the next sync.
 
 ### Database persistence
 
-⚠️ SQLite runs on **ephemeral storage**. The database survives restarts within
-a deploy, but **each redeploy starts from an empty database**.
+⚠️ SQLite runs on **ephemeral storage**, and on a Free instance there is no
+alternative — Free instances cannot attach a persistent disk. The database is
+discarded whenever the service restarts or spins down.
 
 Recent data repopulates within a poll interval or two, so the dashboard's live
-view recovers quickly. The longer `/api/trends` ranges do not: `30d`, `90d`,
-and especially `1y` need history that ephemeral storage never accumulates.
+view recovers quickly. The longer `/api/trends` ranges never do: `30d`, `90d`
+and `1y` read from `daily_rollups`, which needs history that ephemeral storage
+cannot accumulate. Those ranges will keep returning empty or near-empty results
+for as long as the service runs on Free.
 
-Attaching a Render persistent disk would fix this — set `DATABASE_PATH` to a
-path on the mounted volume, which `db.ts` will create — but a disk requires a
-paid instance and forces single-instance deploys with no zero-downtime
-rollout. That tradeoff is tracked as a separate decision rather than assumed
-here.
+A persistent disk would fix it — `daily_rollups` is never pruned, so the ranges
+would fill in as days elapse — but it requires a paid instance and forces
+single-instance deploys with no zero-downtime rollout. Tracked in #188, blocked
+until the service is on a paid plan.
 
 ## Deploying the Dashboard to Vercel
 
