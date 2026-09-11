@@ -25,7 +25,11 @@ document says so instead of describing what it ought to do.
 ## Conventions
 
 **Base URL.** `http://localhost:4000` by default; the port comes from `PORT`.
-There is no path prefix or version segment.
+There is no path prefix or version segment. A deployed instance serves the same
+routes from its own origin — the hosted backend is at
+`https://netpulse-backend-6myk.onrender.com`, which is what the dashboard's
+`VITE_API_URL` points at. Substitute it for `http://localhost:4000` in any
+example below.
 
 **No authentication.** No route requires a credential, and none accepts one.
 
