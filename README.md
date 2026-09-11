@@ -201,6 +201,83 @@ paid instance and forces single-instance deploys with no zero-downtime
 rollout. That tradeoff is tracked as a separate decision rather than assumed
 here.
 
+## Deploying the Dashboard to Vercel
+
+`frontend/vercel.json` configures the dashboard as a static Vite build. The
+frontend and backend deploy independently: Vercel serves the built assets, and
+the browser talks to the backend directly over both REST and WebSocket.
+
+### Pointing the build at a backend
+
+`frontend/` reads two optional build-time variables, documented in
+`frontend/.env.example`:
+
+| Variable | Meaning |
+|---|---|
+| `VITE_API_URL` | Absolute backend origin, e.g. `https://netpulse-backend-6myk.onrender.com`. Unset means same origin. |
+| `VITE_WS_URL` | Optional override for the WebSocket origin. Derived from `VITE_API_URL` by protocol swap when unset, which is correct for every normal deploy. |
+
+⚠️ These are **build-time** values, not runtime ones — Vite substitutes them
+into the bundle when it compiles. Editing one in the Vercel dashboard does
+nothing until the project is **redeployed**.
+
+Leaving `VITE_API_URL` unset is not an error: the app falls back to same-origin
+requests, exactly as it behaves behind the dev proxy. On Vercel that means the
+dashboard loads and then fails every request, because nothing serves `/api`
+there. The symptom is a dashboard stuck on empty charts with 404s in the
+console.
+
+### First deploy
+
+1. In the Vercel dashboard, **Add New → Project** and import this repository.
+2. Set **Root Directory** to `frontend`. This is the counterpart to
+   `rootDir: backend` in `render.yaml` — there is no root `package.json`, so
+   Vercel must be pointed at the package. Vercel then reads
+   `frontend/vercel.json`, and the framework preset, build command and output
+   directory all come from it.
+3. Set **Node.js Version** to 22.x or 24.x, matching the `engines` range in
+   `frontend/package.json`.
+4. Under **Environment Variables**, add `VITE_API_URL` with the backend's
+   origin. Apply it to Production, Preview, and Development so preview deploys
+   are not silently same-origin.
+5. Deploy, then confirm the deployment — see below.
+
+### Allowing the Vercel origin
+
+The backend rejects WebSocket upgrades from origins it does not recognise, so
+its `CORS_ORIGIN` must cover wherever Vercel serves this from. Vercel gives
+every preview deploy its own hostname
+(`<project>-git-<branch>-<scope>.vercel.app`), and `CORS_ORIGIN` is an
+exact-match allowlist with no pattern support — so a fixed list covers
+production but silently breaks previews.
+
+`CORS_ORIGIN=*` is the practical setting for this project: the API is a
+public, read-only, unauthenticated feed of data that is already public on the
+Stellar network, so there is nothing an allowlist protects. See
+[Allowed Origins](#allowed-origins) for the formats.
+
+### Confirming the deployment
+
+Charts filling with data is **not** sufficient evidence that the WebSocket
+works: `useSubscription` falls back to polling `/api/*` every 5 seconds when the
+socket is refused, and the dashboard looks identical either way. There is no
+on-screen streaming indicator — the hook tracks `isStreaming` internally but
+nothing renders it — so the check has to happen in DevTools.
+
+Open the deployed dashboard, then in **DevTools → Network**:
+
+- Filter to **WS**. There should be one `/ws` request against the *backend's*
+  host showing `101 Switching Protocols`, with snapshot frames arriving every
+  few seconds under its Messages tab.
+- The `/api/*` calls should go to the backend's host, not the Vercel one.
+
+Two failure modes look similar and are worth telling apart:
+
+| Symptom | Cause |
+|---|---|
+| `/api/*` requests go to the Vercel host and 404 | `VITE_API_URL` was unset at build time, or was set after the last deploy and needs a rebuild |
+| `/api/*` succeeds but `/ws` is refused with `403`, and `/api/*` repeats every 5s | `CORS_ORIGIN` on the backend does not cover this Vercel origin; the handshake rejection is also logged backend-side |
+
 ## History Export
 
 `GET /api/history` serves aggregated 5-minute buckets, and accepts an optional

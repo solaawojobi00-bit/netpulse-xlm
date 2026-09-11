@@ -12,6 +12,7 @@ import {
   type OperationBreakdownResponse,
   type SorobanMetricsResponse,
 } from "./api";
+import { wsUrl } from "./config";
 
 const POLL_FALLBACK_MS = 5000;
 
@@ -110,9 +111,7 @@ export function useSubscription(network: Network): SubscriptionData {
 
     // Try WebSocket connection first
     try {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      ws = new WebSocket(wsUrl);
+      ws = new WebSocket(wsUrl());
 
       ws.onopen = () => {
         if (cancelled) return;

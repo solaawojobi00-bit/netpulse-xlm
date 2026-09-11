@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "./config";
+
 export interface LedgerSample {
   sequence: number;
   closedAt: string;
@@ -53,7 +55,7 @@ export type Network = "mainnet" | "testnet";
 export async function fetchHealth(
   network: Network = "mainnet",
 ): Promise<HealthResponse> {
-  const res = await fetch(`/api/health?network=${network}`);
+  const res = await fetch(`${API_BASE_URL}/api/health?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/health failed: ${res.status}`);
   return (await res.json()) as HealthResponse;
 }
@@ -61,7 +63,9 @@ export async function fetchHealth(
 export async function fetchRecentLedgers(
   network: Network = "mainnet",
 ): Promise<LedgerSample[]> {
-  const res = await fetch(`/api/ledgers/recent?network=${network}`);
+  const res = await fetch(
+    `${API_BASE_URL}/api/ledgers/recent?network=${network}`,
+  );
   if (!res.ok) throw new Error(`GET /api/ledgers/recent failed: ${res.status}`);
   const body = (await res.json()) as { ledgers: LedgerSample[] };
   return body.ledgers;
@@ -74,7 +78,7 @@ export interface RecentFeesResponse {
 export async function fetchRecentFees(
   network: Network = "mainnet",
 ): Promise<FeeSnapshot[]> {
-  const res = await fetch(`/api/fees/recent?network=${network}`);
+  const res = await fetch(`${API_BASE_URL}/api/fees/recent?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/fees/recent failed: ${res.status}`);
   const body = (await res.json()) as RecentFeesResponse;
   return body.snapshots;
@@ -109,7 +113,9 @@ export async function fetchHistory(
   network: Network = "mainnet",
   range: HistoryRange = "24h",
 ): Promise<HistoryResponse> {
-  const res = await fetch(`/api/history?network=${network}&range=${range}`);
+  const res = await fetch(
+    `${API_BASE_URL}/api/history?network=${network}&range=${range}`,
+  );
   if (!res.ok) throw new Error(`GET /api/history failed: ${res.status}`);
   return (await res.json()) as HistoryResponse;
 }
@@ -158,7 +164,9 @@ export async function fetchTrends(
   network: Network = "mainnet",
   range: TrendRange = "90d",
 ): Promise<TrendsResponse> {
-  const res = await fetch(`/api/trends?network=${network}&range=${range}`);
+  const res = await fetch(
+    `${API_BASE_URL}/api/trends?network=${network}&range=${range}`,
+  );
   if (!res.ok) throw new Error(`GET /api/trends failed: ${res.status}`);
   return (await res.json()) as TrendsResponse;
 }
@@ -196,7 +204,9 @@ export interface OperationBreakdownResponse {
 export async function fetchOperationBreakdown(
   network: Network = "mainnet",
 ): Promise<OperationBreakdownResponse> {
-  const res = await fetch(`/api/operations/breakdown?network=${network}`);
+  const res = await fetch(
+    `${API_BASE_URL}/api/operations/breakdown?network=${network}`,
+  );
   if (!res.ok)
     throw new Error(`GET /api/operations/breakdown failed: ${res.status}`);
   return (await res.json()) as OperationBreakdownResponse;
@@ -214,7 +224,7 @@ export interface SorobanMetricsResponse {
 export async function fetchSorobanMetrics(
   network: Network = "mainnet",
 ): Promise<SorobanMetricsResponse> {
-  const res = await fetch(`/api/soroban?network=${network}`);
+  const res = await fetch(`${API_BASE_URL}/api/soroban?network=${network}`);
   if (!res.ok) throw new Error(`GET /api/soroban failed: ${res.status}`);
   return (await res.json()) as SorobanMetricsResponse;
 }
