@@ -33,6 +33,7 @@ import {
   formatStroops,
 } from "./format";
 import { useQueryParam } from "./useQueryParam";
+import { useSlowStart } from "./useSlowStart";
 import { useSubscription } from "./useSubscription";
 import { useTheme } from "./useTheme";
 
@@ -179,6 +180,14 @@ export function App() {
   const statStatus = resolveValueStatus(health, error);
   const isStale = health?.status === "stale";
 
+  /*
+   * A cold start produces no error to show — the backend sleeps when idle and
+   * the request that wakes it is held open for about a minute rather than
+   * failing — so without this the tiles and charts sit in their loading state
+   * indefinitely, looking exactly like a fast load that has not landed yet.
+   */
+  const isSlowStart = useSlowStart(health !== null, error);
+
   return (
     <div className="app">
       <header className="app__header">
@@ -233,6 +242,23 @@ export function App() {
               {health.congestion.alertThreshold !== undefined &&
                 ` (alert threshold: ${Math.round(health.congestion.alertThreshold * 100)}%)`}
               . Transactions may experience surge pricing or delayed inclusion.
+            </div>
+          )}
+
+          {/*
+            Informational rather than a warning: a cold start is expected
+            behaviour on this deployment, not a fault. Styling it like the two
+            banners below would tell a visitor something is wrong at the exact
+            moment nothing is.
+
+            Mutually exclusive with the warning banner by construction —
+            `isSlowStart` requires `error` to be null and no data to have
+            arrived, while that banner requires one or the other.
+          */}
+          {isSlowStart && (
+            <div className="banner banner--info" role="status">
+              Waking the backend up. It sleeps when nobody is using it and takes
+              up to a minute to start — this page will fill in on its own.
             </div>
           )}
 

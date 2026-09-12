@@ -255,6 +255,18 @@ body {
   overflow-wrap: break-word;
 }
 
+/*
+ * Neutral by design. Used for states that are expected rather than wrong — a
+ * cold start on an instance that sleeps when idle — so it reuses the ordinary
+ * surface and border tokens instead of a status tint, and follows both themes
+ * for free as a result.
+ */
+.banner--info {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
 .banner--warn {
   background: var(--warn-tint-bg);
   border: 1px solid var(--warn-tint-border);
