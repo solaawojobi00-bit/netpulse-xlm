@@ -17,6 +17,31 @@ import { wsUrl } from "./config";
 const POLL_FALLBACK_MS = 5000;
 
 /*
+ * Reconnect backoff.
+ *
+ * The socket used to be opened exactly once: any close — a backend deploy, a
+ * dropped connection, a laptop waking from sleep — left the tab on the 5s REST
+ * fallback until someone reloaded the page. The backend now runs on an instance
+ * type that sleeps after 15 minutes of inactivity, so a close is routine rather
+ * than exceptional.
+ *
+ * The ceiling is what matters most here. A sleeping instance takes roughly a
+ * minute to wake, and the first connection attempt is itself what wakes it, so
+ * retrying must stay cheap for far longer than a normal reconnect would need.
+ */
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+
+/*
+ * How long a connection must survive before the backoff is considered
+ * recovered. Without this, a backend that accepts a socket and immediately
+ * drops it would reset the delay to one second on every attempt and be hammered
+ * in a near-tight loop — the flap looks like a success to anything that only
+ * watches `onopen`.
+ */
+const RECONNECT_STABLE_MS = 30000;
+
+/*
  * The shape the server sends on /ws. Declaring it is what lets the handler
  * below read fields without every access being an unchecked `any` hop into
  * typed React state.
@@ -72,7 +97,24 @@ export function useSubscription(network: Network): SubscriptionData {
   useEffect(() => {
     let ws: WebSocket | null = null;
     let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let stableTimer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
+
+    /*
+     * Consecutive failed connection attempts, driving the backoff delay. Reset
+     * only once a connection has lasted RECONNECT_STABLE_MS.
+     */
+    let attempt = 0;
+
+    /*
+     * Whether the REST fallback loop is running. Tracked explicitly rather than
+     * inferred from `fallbackTimer`, because that timer is unset for the whole
+     * duration of an in-flight poll — so two disconnect events arriving while
+     * one poll was awaiting would each start their own loop, and from then on
+     * every tick would fire twice.
+     */
+    let polling = false;
 
     async function pollFallback() {
       if (document.visibilityState === "hidden") {
@@ -104,22 +146,89 @@ export function useSubscription(network: Network): SubscriptionData {
     }
 
     function scheduleNextPoll() {
-      if (!cancelled) {
+      if (!cancelled && polling) {
         fallbackTimer = setTimeout(pollFallback, POLL_FALLBACK_MS);
       }
     }
 
-    // Try WebSocket connection first
-    try {
-      ws = new WebSocket(wsUrl());
+    function startPolling() {
+      if (cancelled || polling) return;
+      polling = true;
+      void pollFallback();
+    }
 
-      ws.onopen = () => {
+    function stopPolling() {
+      polling = false;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = undefined;
+      }
+    }
+
+    /*
+     * Exponential backoff with jitter over the range [delay/2, delay]. The
+     * jitter matters because every open tab is disconnected by the same event —
+     * a deploy, or the instance going to sleep — so without it they would all
+     * retry in lockstep and arrive together on a backend that is still starting.
+     */
+    function scheduleReconnect() {
+      if (cancelled || reconnectTimer) return;
+      const ceiling = Math.min(
+        RECONNECT_BASE_MS * 2 ** attempt,
+        RECONNECT_MAX_MS,
+      );
+      const delay = ceiling / 2 + Math.random() * (ceiling / 2);
+      attempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        connect();
+      }, delay);
+    }
+
+    /*
+     * Shared by every path that loses the socket. `onerror` is normally
+     * followed by `onclose`, so this runs twice for one failure — the
+     * `reconnectTimer` guard in scheduleReconnect is what keeps that from
+     * counting as two attempts and doubling the delay.
+     */
+    function handleDisconnect() {
+      if (cancelled) return;
+      if (stableTimer) {
+        clearTimeout(stableTimer);
+        stableTimer = undefined;
+      }
+      setIsStreaming(false);
+      startPolling();
+      scheduleReconnect();
+    }
+
+    function connect() {
+      if (cancelled) return;
+
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(wsUrl());
+      } catch {
+        // A malformed URL or a blocked scheme throws here rather than firing
+        // `onerror`, so this path still has to fall back and retry.
+        handleDisconnect();
+        return;
+      }
+      ws = socket;
+
+      socket.onopen = () => {
         if (cancelled) return;
         setIsStreaming(true);
-        ws?.send(JSON.stringify({ type: "setNetwork", network }));
+        // The socket supersedes polling; leaving both running would double
+        // every request for as long as the connection lasted.
+        stopPolling();
+        socket.send(JSON.stringify({ type: "setNetwork", network }));
+        stableTimer = setTimeout(() => {
+          attempt = 0;
+        }, RECONNECT_STABLE_MS);
       };
 
-      ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
         if (cancelled) return;
         try {
           const payload = JSON.parse(event.data as string) as SnapshotMessage;
@@ -147,25 +256,11 @@ export function useSubscription(network: Network): SubscriptionData {
         }
       };
 
-      ws.onerror = () => {
-        if (cancelled) return;
-        setIsStreaming(false);
-        if (!fallbackTimer) {
-          void pollFallback();
-        }
-      };
-
-      ws.onclose = () => {
-        if (cancelled) return;
-        setIsStreaming(false);
-        if (!fallbackTimer) {
-          void pollFallback();
-        }
-      };
-    } catch {
-      setIsStreaming(false);
-      void pollFallback();
+      socket.onerror = handleDisconnect;
+      socket.onclose = handleDisconnect;
     }
+
+    connect();
 
     // Always fetch initial data immediately via REST so there is no blank state
     void fetchHealth(network)
@@ -197,6 +292,8 @@ export function useSubscription(network: Network): SubscriptionData {
     return () => {
       cancelled = true;
       if (ws) {
+        // Detached before closing: otherwise this close fires `onclose`, which
+        // would schedule a reconnect for a hook that is going away.
         ws.onopen = null;
         ws.onmessage = null;
         ws.onerror = null;
@@ -204,6 +301,8 @@ export function useSubscription(network: Network): SubscriptionData {
         ws.close();
       }
       if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (stableTimer) clearTimeout(stableTimer);
     };
   }, [network]);
 
