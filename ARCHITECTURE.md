@@ -43,7 +43,8 @@ As of Phase 2, NetPulse utilizes a hybrid streaming architecture combining Horiz
   - Close time is measured against the ledger that precedes a record **by sequence**, not the newest ledger in the store. With no such predecessor in the window the close time is reported as `null` rather than as a delta against an unrelated ledger — which is what produced close times of around -36,000,000 seconds.
   - Because Horizon does not offer SSE streaming on `/fee_stats`, the backend continues to poll `/fee_stats` on a configurable interval.
 - **WebSocket Broadcast Fan-out:** Instead of multiple browser tabs opening individual SSE connections to public Horizon, the backend terminates the Horizon stream and broadcasts updates over a single WebSocket channel (`/ws`) to all connected frontend clients.
-- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` and `/api/trends` are fetched separately over REST on their own intervals in both modes.
+- **Dual-Mode Frontend & Fallback:** The frontend uses the `useSubscription` hook to receive real-time pushes over WebSocket, with seamless automatic fallback to HTTP polling if WebSocket connectivity is blocked or unavailable. The fallback path polls all five live endpoints — `/api/health`, `/api/ledgers/recent`, `/api/fees/recent`, `/api/soroban` and `/api/operations/breakdown` — in one `Promise.all`, mirroring what a single WebSocket snapshot frame carries. `/api/history` and `/api/trends` are fetched separately over REST on their own intervals in both modes. An initial REST fetch also fires on mount regardless of socket state, so the dashboard is never blank while the handshake completes.
+- **Frontend Reconnection:** Falling back is not the whole story — the client also keeps trying to get the socket back, with jittered exponential backoff from 1s to a 30s ceiling, resetting only once a connection has survived 30 seconds. Polling and reconnection run concurrently: REST covers the gap while retries continue underneath, and the socket taking over stops the polling loop so the two never double up. The 30s ceiling and the stability requirement are both sized for the deployment rather than for a transient network blip — see [Deployment Topology](#deployment-topology). The stability requirement specifically guards the flap case, where a backend that accepts a socket and immediately drops it would otherwise reset the delay to one second on every attempt and be hammered in a near-tight loop.
 - **Backward-Compatible REST APIs:** All REST endpoints remain active and continue to serve up-to-date in-memory metrics for external scripts, health probes, and test harnesses.
 
 ## Stack
@@ -182,9 +183,12 @@ Express REST API                      WebSocket /ws
         │                              │
         └──────────────┬───────────────┘
                        ▼
-Frontend (React — useSubscription)
+Frontend (React — useSubscription)     [deployed to Vercel: a different origin,
+        │                               so REST and WS both cross origins —
+        │                               see Deployment Topology below]
         │  - WebSocket push is the primary path
         │  - falls back to REST polling if WebSocket is blocked/unavailable
+        │  - retries the socket meanwhile, backoff 1s → 30s cap with jitter
         │  - history is fetched separately over REST on its own interval
         ▼
 Dashboard UI
@@ -203,6 +207,8 @@ Dashboard UI
         - Light and dark theme, toggled in the header
         - Network, history range and trend range reflected in the URL, so a
           view is shareable and survives a reload
+        - "Waking the backend up" notice after 6s of a data-less first load,
+          which the deployment below makes a routine event rather than a fault
 ```
 
 The backend sits between the frontend and Horizon (rather than the
@@ -216,6 +222,78 @@ client-side, and (3) it gave a clean seam for exactly the changes Phase 2
 made — WebSocket push and a real datastore both landed behind this
 boundary without the frontend's data shapes changing.
 
+## Deployment Topology
+
+The diagram above is one logical system; in production it is **two independently
+deployed services on two different origins**. Everything above still holds — the
+split changes where the boundary falls, not what is on either side of it.
+
+```
+Browser
+   │
+   │  HTTPS (static assets)
+   ▼
+Vercel — frontend/  (static Vite build, frontend/vercel.json)
+   │     Root Directory: frontend. VITE_API_URL is compiled into the
+   │     bundle at build time, so it points at the origin below.
+   │
+   │  ┌─ cross-origin REST   https://netpulse-backend-6myk.onrender.com/api/*
+   └─ ┤
+      └─ cross-origin WS     wss://netpulse-backend-6myk.onrender.com/ws
+                             │
+                             ▼
+Render — backend/  (web service, render.yaml Blueprint, Free instance)
+   │     rootDir: backend. One process, one port: REST and /ws share it.
+   │     SQLite on ephemeral storage — no disk is attached.
+   ▼
+Public Horizon (SSE + polling, as above)
+```
+
+Three consequences follow from the split, and they are the source of most of
+what looks surprising about this deployment:
+
+**1. Origin configuration is load-bearing in both directions.** The frontend
+must be told where the backend is (`VITE_API_URL`, build-time — changing it in
+Vercel's dashboard does nothing until a rebuild), and the backend must be told
+the frontend is allowed (`CORS_ORIGIN`, runtime). Neither default works across
+origins: unset `VITE_API_URL` means same-origin, which on Vercel means asking
+Vercel for `/api/*` and getting nothing. The two failure modes look alike from
+the browser and are told apart in README's
+[Confirming the deployment](./README.md#confirming-the-deployment).
+
+The same allowlist governs CORS and the WebSocket upgrade, which matters because
+the browser's same-origin policy does not apply to WebSocket handshakes — that
+check, not CORS, is what refuses an unlisted origin at the upgrade stage.
+
+**2. There is no local-only mode in production, and no shared filesystem.**
+Nothing about the split is visible in application code: the server reads `PORT`,
+binds the unspecified address, and serves `/ws` from the same port, so it runs
+identically under the dev proxy and on Render. The dev proxy in `vite.config.ts`
+is what makes local development look same-origin; it applies to `vite dev` and
+`vite preview` and never to a static production build. `frontend/src/config.ts`
+resolves both origins in one place so an unset variable has a single defined
+meaning.
+
+**3. The backend sleeps, so ingestion is not continuous.** The Free instance
+spins down after roughly 15 minutes without inbound traffic and takes about a
+minute to come back on the next request or socket connection. This is a
+deliberate cost trade-off, not an oversight — the technical case against it is
+real and recorded in `render.yaml` and in README's
+[Instance type](./README.md#instance-type). Two architectural consequences:
+
+- **Persistence is effectively live-window-only.** Free instances cannot attach
+  a disk, so the SQLite file is discarded on every restart and spin-down. The
+  in-memory window and the 24h history view refill within a poll interval or
+  two. The `daily_rollups` table cannot: it is fed by *complete UTC days* held
+  in raw storage, and no day survives long enough to be rolled up. So the
+  `/api/trends` 30d, 90d and 1y ranges stay empty on this deployment — a
+  deployment property, not a defect in the rollup logic, which is unchanged and
+  correct. Tracked in #188, blocked on a paid plan.
+- **Socket closes are routine.** Every spin-down disconnects every connected
+  client, which is why the frontend reconnect loop described above exists and
+  why its ceiling is sized against a minute-long wake rather than a momentary
+  blip.
+
 ## Project Structure
 
 ```
@@ -223,19 +301,27 @@ netpulse-xlm/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
 │   ├── scripts/
-│   │   └── audit-deps.mjs   npm audit wrapper: real advisories fail,
-│   │                        registry outages warn
+│   │   ├── audit-deps.mjs   npm audit wrapper: real advisories fail,
+│   │   │                    registry outages warn
+│   │   ├── audit-deps.test.mjs  node:test suite for the wrapper above,
+│   │   │                    run as its own CI job (#181)
+│   │   └── test-fixtures/   stub npm responses that suite runs against
 │   ├── workflows/
-│   │   ├── ci.yml           backend + frontend build, audit, and tests
+│   │   ├── ci.yml           backend + frontend build, audit, and tests,
+│   │   │                    plus the audit-script suite as a third job
 │   │   ├── codeql.yml       CodeQL static analysis
 │   │   ├── lockfile-verify.yml asserts package-lock.json matches package.json
 │   │   ├── release.yml      semantic-release on [release] commit marker
 │   │   └── secret-scan.yml  pinned and verified Gitleaks scanner
 │   ├── dependabot.yml       version updates for npm and GitHub Actions
 │   └── pull_request_template.md
+├── render.yaml              Render Blueprint for the backend service
 ├── docs/
 │   └── API.md               REST + WebSocket reference for consumers
 ├── backend/
+│   ├── scripts/
+│   │   └── rollup-gap-check.mjs  read-only diagnostic: missing ledgers and
+│   │                             already-permanent rollup loss
 │   ├── src/
 │   │   ├── index.ts       Express app entry point + route definitions
 │   │   ├── horizon.ts     Horizon fetch functions + SSE stream client
@@ -265,15 +351,21 @@ netpulse-xlm/
     │   ├── main.tsx
     │   ├── App.tsx
     │   ├── api.ts             typed fetch wrappers + response types
-    │   ├── useSubscription.ts WebSocket subscription + REST fallback
+    │   ├── config.ts          resolves the backend REST and WS origins from
+    │   │                      VITE_API_URL / VITE_WS_URL (build-time)
+    │   ├── useSubscription.ts WebSocket subscription, reconnect backoff,
+    │   │                      REST fallback
     │   ├── usePolling.ts      interval polling hook (fallback path)
     │   ├── useQueryParam.ts   URL-backed state (network, history + trend range)
+    │   ├── useSlowStart.ts    detects a cold start so the UI can explain it
     │   ├── useTheme.ts        light/dark theme preference
     │   ├── format.ts          number/duration formatting helpers
     │   ├── components/        stat tiles, charts, history & trends views,
     │   │                      error boundary, theme toggle
     │   └── styles.css
+    ├── .env.example           VITE_API_URL / VITE_WS_URL, both optional
     ├── index.html
+    ├── vercel.json            static Vite build config for Vercel
     ├── vite.config.ts         dev proxy for /api and /ws
     ├── package.json
     └── tsconfig.json

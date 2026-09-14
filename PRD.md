@@ -126,6 +126,18 @@ stays legible alongside what actually shipped.
   *Shipped since v1 (#14):* the backend holds a persistent Horizon SSE
   connection and pushes snapshots to clients over WebSocket. The REST
   endpoints remain available as a fallback.
+- **Hosting and public deployment.** v1 was a run-it-locally tool: the success
+  criteria below ask only that the dashboard be reachable on a developer's own
+  machine, and standing up infrastructure was not the point of the exercise.
+  *Shipped since v1 (#189, #190, #191, #194):* both halves are deployed and
+  public — the backend on Render from a `render.yaml` Blueprint, the dashboard
+  on Vercel as a static build, on separate origins. The deployment runs on a
+  free tier, which is a deliberate cost trade-off with two visible consequences:
+  the backend sleeps when idle, so a cold load waits about a minute (#196
+  explains the wait on-screen, #195 reconnects the socket afterwards), and
+  storage is ephemeral, so the `/api/trends` 30d/90d/1y ranges stay empty
+  (#188). **A durable-storage deployment remains out of scope** until the
+  service is on a paid plan. See ARCHITECTURE.md for the topology.
 
 ## Success Criteria for Phase 1
 
