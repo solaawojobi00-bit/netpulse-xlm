@@ -12,6 +12,9 @@ testing.
 Pulls real, live data from Stellar's public Horizon API — mainnet by
 default, with testnet selectable from the header. No mocked data.
 
+**Live demo:** [netpulse-xlm.vercel.app](https://netpulse-xlm.vercel.app) — the
+backend sleeps when idle, so a cold load takes about a minute to fill in.
+
 See [PRD.md](./PRD.md) for scope and metrics, and
 [ARCHITECTURE.md](./ARCHITECTURE.md) for how data is fetched and how the
 dashboard stays live.
