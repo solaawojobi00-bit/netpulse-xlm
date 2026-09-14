@@ -241,9 +241,46 @@ body {
   gap: 10px;
 }
 
+/*
+ * The one line that says what this is to someone arriving from a link rather
+ * than from the repo. Measured rather than full-width: at 1080px an unbounded
+ * line runs past the comfortable reading measure.
+ */
+.app__pitch {
+  margin: 10px 0 2px;
+  max-width: 62ch;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-color);
+}
+
 .app__subtitle {
-  margin: 4px 0 24px;
+  margin: 4px 0 10px;
   color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.app__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+}
+
+/*
+ * Underlined with the accent tint rather than `text-decoration`, so the links
+ * read as links without the underline crowding the descenders, and the border
+ * has somewhere to go on hover.
+ */
+.app__links a {
+  color: var(--accent-color);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-tint-border);
+}
+
+.app__links a:hover {
+  border-bottom-color: var(--accent-color);
 }
 
 .banner {

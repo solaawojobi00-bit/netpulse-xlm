@@ -53,6 +53,14 @@ const NETWORK_OPTIONS = [
 
 const RANGE_OPTIONS = HISTORY_RANGES.map((value) => ({ value, label: value }));
 
+const REPO_URL = "https://github.com/solaawojobi00-bit/netpulse-xlm";
+
+const PROJECT_LINKS = [
+  { href: REPO_URL, label: "Source on GitHub" },
+  { href: `${REPO_URL}/blob/main/ARCHITECTURE.md`, label: "How it works" },
+  { href: `${REPO_URL}/blob/main/docs/API.md`, label: "API docs" },
+];
+
 const TREND_RANGE_OPTIONS = TREND_RANGES.map((value) => ({
   value,
   label: value,
@@ -210,10 +218,28 @@ export function App() {
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
         </div>
+        <p className="app__pitch">
+          A live read on how healthy the Stellar network is right now — ledger
+          close time, base fees, congestion and throughput, straight from public
+          Horizon. Real data, no mocks.
+        </p>
         <p className="app__subtitle">
           Live Stellar {network === "testnet" ? "testnet" : "mainnet"} health,
           via public Horizon
         </p>
+        {/*
+          The dashboard is the whole app — there is no router and no about
+          page — so the header carries the only route out to the project
+          itself. Labelled because a nav inside the banner landmark is a
+          second navigation region, and "Project links" says which one.
+        */}
+        <nav className="app__links" aria-label="Project links">
+          {PROJECT_LINKS.map(({ href, label }) => (
+            <a key={href} href={href} target="_blank" rel="noreferrer">
+              {label}
+            </a>
+          ))}
+        </nav>
       </header>
 
       {/*
