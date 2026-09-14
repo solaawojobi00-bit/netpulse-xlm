@@ -273,6 +273,12 @@ const PAIRS = [
   { name: "soroban stat pill", fg: "--text-color", on: "--bg-color" },
   { name: "soroban stat pill, muted", fg: "--text-muted", on: "--bg-color" },
   { name: "sync status, stale", fg: "--warn-color", on: "--bg-color" },
+  /*
+   * The header project links. Accent on the page background is already checked
+   * as a UI pair for the focus ring, but that only asks 3:1 — as link text it
+   * has to clear 4.5:1.
+   */
+  { name: "header project links", fg: "--accent-color", on: "--bg-color" },
 ];
 
 /*
