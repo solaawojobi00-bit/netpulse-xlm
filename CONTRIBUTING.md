@@ -46,6 +46,40 @@ npm run dev
 
 The frontend dev server runs Vite (default `http://localhost:5173`) and proxies `/api` and `/ws` to the backend on port `4000`.
 
+No frontend `.env` is needed locally. `frontend/.env.example` documents two
+optional build-time variables (`VITE_API_URL`, `VITE_WS_URL`) that point a
+*production* build at a backend on another origin; the dev proxy makes local
+development same-origin, so both stay unset. Note they are read at build time —
+Vite compiles them into the bundle — so changing one never takes effect without
+a rebuild.
+
+---
+
+## How This Project Is Deployed
+
+Worth knowing before you change anything touching origins, environment
+variables, or the WebSocket, because production is **two services on two
+origins** rather than the single same-origin process local development
+resembles:
+
+- **Backend → Render**, from the `render.yaml` Blueprint at the repository root.
+  Runs on a Free instance that sleeps after ~15 idle minutes and takes about a
+  minute to wake, with SQLite on ephemeral storage.
+- **Frontend → Vercel**, from `frontend/vercel.json`, as a static Vite build
+  with `VITE_API_URL` compiled in.
+
+Two consequences catch people out. Changes to `frontend/src/config.ts` or to
+`CORS_ORIGIN` handling in `backend/src/origins.ts` affect whether the deployed
+dashboard can reach the deployed backend at all, and local development will not
+show you a regression there because the dev proxy hides the origin split. And
+because `CORS_ORIGIN` on the deployed backend is an exact-match allowlist set to
+the production origin only, Vercel **preview deploys cannot reach the backend** —
+empty charts on a preview URL are expected and are not a fault in your branch.
+
+See [Deployment Topology](./ARCHITECTURE.md#deployment-topology) for how the
+pieces fit, and the deploy sections of [README.md](./README.md) for the dashboard
+steps.
+
 ---
 
 ## Claiming an Issue
@@ -160,6 +194,22 @@ job if a palette change regresses contrast. jsdom cannot resolve cascaded
 colours, so the axe checks in the test suite skip contrast and this script
 covers it instead.
 
+### Audit Script Checks
+
+`.github/scripts/` sits outside both packages, so the lint and format steps
+above — which run from inside `backend/` and `frontend/` — do not cover it. Its
+own suite runs as a third CI job and has a local equivalent, from the repository
+root:
+
+```bash
+# Regression tests for the audit-deps wrapper
+node --test .github/scripts/audit-deps.test.mjs
+```
+
+It installs nothing and touches no network: the tests stub `npm` on `PATH`.
+Expect it to take around 30 seconds, which is the script's real retry delays
+being exercised rather than the suite being slow.
+
 ### A note on the dependency audit
 
 `audit-deps.mjs` wraps `npm audit` rather than calling it directly, because
@@ -177,6 +227,7 @@ before merge:
 | --- | --- |
 | Backend Type-Check & Tests | `.github/workflows/ci.yml` |
 | Frontend Build & Tests | `.github/workflows/ci.yml` |
+| Audit Script Tests | `.github/workflows/ci.yml` |
 | Secret Scan | `.github/workflows/secret-scan.yml` |
 | Analyze (javascript-typescript) | `.github/workflows/codeql.yml` |
 | Verify lockfile (backend) | `.github/workflows/lockfile-verify.yml` |

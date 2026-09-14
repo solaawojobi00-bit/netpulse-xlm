@@ -48,6 +48,13 @@ WebSocket upgrade. No response headers are added to the CORS exposed-headers
 list, which matters for [history](#get-apihistory) and
 [trends](#get-apitrends) exports.
 
+The hosted backend is **not** open to all origins: it allows
+`https://netpulse-xlm.vercel.app` only. Browser code served from anywhere else
+will have its REST calls blocked and its WebSocket handshake refused with `403`.
+Requests that send no `Origin` header at all — curl, scripts, server-side
+callers — are unaffected and always allowed, so the hosted origin is usable for
+non-browser consumers as-is. For browser code, run your own backend.
+
 ### The `network` query parameter
 
 Seven of the eight routes accept `?network=`. Parsing is a strict equality check:
@@ -591,6 +598,24 @@ than a drop to zero.
 Rows here are **never deleted**. The table gains roughly 365 rows per year per
 network.
 
+⚠️ **On the hosted backend this route returns no data at all.** That instance
+runs SQLite on ephemeral storage with no persistent disk, so the database is
+discarded on every restart and idle spin-down. A day is only rolled up once it
+is *complete*, and no day survives that long there — so the table stays empty
+and every range returns `"points": []`:
+
+```bash
+curl "https://netpulse-backend-6myk.onrender.com/api/trends?range=90d"
+# {"network":"mainnet","range":"90d","points":[]}
+```
+
+"Never deleted" describes the schema, and is accurate for any backend with
+durable storage, including a local one. It is not a promise the hosted instance
+can keep. Tracked in
+[#188](https://github.com/solaawojobi00-bit/netpulse-xlm/issues/188). If you are
+building against this API and need the long ranges populated, run the backend
+yourself rather than pointing at the hosted origin.
+
 But the table only holds days this backend actually observed. It was introduced
 alongside the rollup mechanism, so it has no rows for any day that was pruned
 before that shipped, and none for days the process was down. A `1y` request on
@@ -748,8 +773,11 @@ say so.
 
 ## `/ws` WebSocket channel
 
-`ws://localhost:4000/ws`. Pushes a full snapshot whenever the server's store
-updates, so a client can render live without polling.
+`ws://localhost:4000/ws` by default, and
+`wss://netpulse-backend-6myk.onrender.com/ws` on the hosted backend — the socket
+shares the REST API's single port, so it is always the same origin as the base
+URL above with the protocol swapped. Pushes a full snapshot whenever the
+server's store updates, so a client can render live without polling.
 
 ### Handshake
 
@@ -861,6 +889,16 @@ The only close code the server originates is **`1001`** with the reason
 `"Server shutting down"`, sent to every client during graceful shutdown before
 the HTTP server closes. Treat `1001` as "come back shortly", and back off
 rather than reconnecting immediately.
+
+**Against the hosted backend, plan for the socket to close routinely.** That
+instance sleeps after roughly 15 minutes without inbound traffic, disconnecting
+every connected client, and takes about a minute to wake — and the connection
+attempt that wakes it is the one that will appear to hang. Reconnect with
+exponential backoff and a ceiling generous enough to cover that wake (NetPulse's
+own dashboard uses 1s doubling to a 30s cap, with jitter so that every client
+disconnected by the same spin-down does not retry in lockstep), and do not treat
+a failed reconnect as the service being down. A self-hosted backend has no such
+behaviour; this is a property of the deployment, not of the protocol.
 
 ## Nullability reference
 

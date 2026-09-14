@@ -38,6 +38,15 @@ per-chart loading and error states, a long-range trends panel over daily
 rollups (30d/90d/1y), and network, history range and trend range reflected
 in the URL so a view is shareable.
 
+Both halves are now deployed and public: the backend runs on Render from the
+`render.yaml` Blueprint, the dashboard on Vercel as a static build, each on its
+own origin. That deployment runs on a Free instance that sleeps when idle, and
+two pieces of frontend behaviour exist because of it — the WebSocket reconnects
+with exponential backoff instead of giving up on the first close, and a first
+load that stalls says the backend is waking rather than sitting on a silent
+spinner. See [Deploying to Render](#deploying-to-render) and
+[Deploying the Dashboard to Vercel](#deploying-the-dashboard-to-vercel).
+
 See the open issues for the current backlog. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for local setup, branch conventions, running checks, and how to claim an issue.
 
@@ -165,8 +174,8 @@ port with the REST API, so the service needs no code changes to run there.
 1. In the Render dashboard, choose **New → Blueprint** and connect this
    repository. Render reads `render.yaml` and proposes the `netpulse-backend`
    service.
-2. When prompted for **`CORS_ORIGIN`**, enter the frontend's origin — for
-   example `https://netpulse.vercel.app`. It accepts a comma-separated list,
+2. When prompted for **`CORS_ORIGIN`**, enter the frontend's origin — this
+   deployment uses `https://netpulse-xlm.vercel.app`. It accepts a comma-separated list,
    and the formats are described under [Allowed Origins](#allowed-origins).
    Getting this wrong does not break the REST API in an obvious way, but the
    browser's WebSocket handshake is refused with `403`, so the dashboard loads
@@ -205,9 +214,27 @@ for.
 **not a fault**. Likewise `/api/health` reporting `"stale"` immediately after a
 cold start is expected, and clears within a poll interval or two.
 
-No application code handles this specially, and none needs to: the poller
-reconnects to Horizon with backoff at start-up, and the frontend falls back to
-polling `/api/*` whenever the socket is unavailable.
+Three things absorb the spin-down, two of them written for it specifically:
+
+- **The poller reconnects to Horizon with backoff at start-up**, so a woken
+  instance resumes ingestion without intervention. This predates the Free tier
+  and needed no change.
+- **The browser reconnects the WebSocket with jittered exponential backoff**
+  (1s to a 30s ceiling, reset once a connection has held for 30s) — see
+  `frontend/src/useSubscription.ts`. Before this the socket was opened exactly
+  once, so the first close left a tab on the 5s REST fallback until someone
+  reloaded. On an instance that sleeps every 15 idle minutes a close is routine
+  rather than exceptional, and the high ceiling is deliberate: the first retry
+  is itself what wakes the instance, so retrying has to stay cheap across the
+  full minute that takes. The jitter keeps every open tab from retrying in
+  lockstep against a backend that is still starting.
+- **A cold first load explains itself.** After 6 seconds with no data and no
+  error, the dashboard shows "Waking the backend up…" rather than an indefinite
+  loading state — see `frontend/src/useSlowStart.ts`. The threshold was measured
+  against the deployed backend, where a warm `/api/health` returns in roughly
+  1.0-1.5s. A sleeping instance holds the request open instead of failing it, so
+  there is no error to surface and nothing else would distinguish a cold start
+  from a slow one.
 
 Moving to a paid instance is a dashboard change (**Settings → Instance Type**)
 plus updating `plan:` in `render.yaml` to match, so the Blueprint does not
@@ -229,6 +256,19 @@ A persistent disk would fix it — `daily_rollups` is never pruned, so the range
 would fill in as days elapse — but it requires a paid instance and forces
 single-instance deploys with no zero-downtime rollout. Tracked in #188, blocked
 until the service is on a paid plan.
+
+This is the live behaviour today, not a hypothetical: against the hosted
+backend, both long ranges come back empty.
+
+```bash
+curl "https://netpulse-backend-6myk.onrender.com/api/trends?range=90d"
+# {"network":"mainnet","range":"90d","points":[]}
+```
+
+The dashboard's own trends panel says the first point appears once the backend
+has been running through a full UTC day, which is accurate for a backend with
+durable storage and not reachable on this one. Read the empty panel as "this
+deployment cannot accumulate days", not as "check back tomorrow".
 
 ## Deploying the Dashboard to Vercel
 
@@ -280,10 +320,23 @@ every preview deploy its own hostname
 exact-match allowlist with no pattern support — so a fixed list covers
 production but silently breaks previews.
 
-`CORS_ORIGIN=*` is the practical setting for this project: the API is a
-public, read-only, unauthenticated feed of data that is already public on the
-Stellar network, so there is nothing an allowlist protects. See
-[Allowed Origins](#allowed-origins) for the formats.
+**This deployment runs the fixed list**, set to the production origin alone:
+
+```bash
+CORS_ORIGIN=https://netpulse-xlm.vercel.app
+```
+
+So the trade-off above is live rather than theoretical. Production works;
+preview deploys load and then fail their WebSocket handshake with `403`,
+falling back to 5-second REST polling that is itself blocked by CORS. If you
+open a preview deploy and find empty charts, this is why — it is the second row
+of the failure table below, and not a fault in the branch you are previewing.
+
+`CORS_ORIGIN=*` is the available alternative: the API is a public, read-only,
+unauthenticated feed of data that is already public on the Stellar network, so
+there is nothing an allowlist protects here, and `*` would make previews work
+as well as production. It is a one-value change under the service's
+**Environment** tab. See [Allowed Origins](#allowed-origins) for the formats.
 
 ### Confirming the deployment
 
@@ -350,6 +403,12 @@ the oldest bucket is usually partial).
 
 `GET /api/trends` serves daily-grain history and accepts the same `format`
 parameter, following the same pattern:
+
+⚠️ **On the hosted backend these ranges are empty.** SQLite sits on ephemeral
+storage there, so no day ever survives to be rolled up — see
+[Database persistence](#database-persistence). Exports below work against a
+backend with durable storage, including a local one; against the live instance
+they produce a header row and nothing else.
 
 | Request | Response |
 |---|---|
