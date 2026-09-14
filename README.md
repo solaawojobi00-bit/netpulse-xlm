@@ -50,6 +50,19 @@ spinner. See [Deploying to Render](#deploying-to-render) and
 See the open issues for the current backlog. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for local setup, branch conventions, running checks, and how to claim an issue.
 
+## Roadmap
+
+**v2 — Alerting layer**
+
+Alerts on ledger anomalies, delivered via webhook, Discord, or Telegram:
+
+- Ledger close-time spikes
+- Base-fee surges
+- Validator quorum issues
+
+Tracked in issues #208–#217 (rule engine, delivery adapters, management UI,
+docs).
+
 ## Running locally
 
 ```bash
