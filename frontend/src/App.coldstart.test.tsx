@@ -40,6 +40,13 @@ vi.mock("./api", async (importOriginal) => {
   };
 });
 
+// Held open too: during a cold start every request to the backend is, the
+// alert rule list included.
+vi.mock("./alertRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./alertRules")>();
+  return { ...actual, fetchAlertRules: () => new Promise(() => {}) };
+});
+
 const health: HealthResponse = {
   status: "ok",
   lastUpdated: "2026-09-12T12:00:00.000Z",

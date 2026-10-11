@@ -29,6 +29,14 @@ vi.mock("./api", async (importOriginal) => {
   };
 });
 
+// The alert panel reads its own endpoint on mount; left unresolved for the
+// same reason the two above are. Its own behaviour is covered in
+// AlertRulesPanel.test.tsx against a real HTTP server.
+vi.mock("./alertRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./alertRules")>();
+  return { ...actual, fetchAlertRules: () => new Promise(() => {}) };
+});
+
 describe("header project links", () => {
   it("points at the repo, the architecture notes and the API docs", () => {
     render(<App />);

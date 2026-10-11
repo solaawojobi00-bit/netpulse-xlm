@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AlertRulesPanel } from "./components/AlertRulesPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FeePercentileChart } from "./components/FeePercentileChart";
 import { FeeSpreadTrendChart } from "./components/FeeSpreadTrendChart";
@@ -398,6 +399,16 @@ export function App() {
             rangeOptions={TREND_RANGE_OPTIONS}
             onRangeChange={setTrendRange}
           />
+
+          {/*
+            Last on the page and keyed to the same network selector as
+            everything above it: the charts say what the network is doing, and
+            this says what NetPulse should shout about when it does it. It
+            reads and writes its own endpoints, so a backend without the
+            management API leaves this panel saying so and the dashboard above
+            untouched.
+          */}
+          <AlertRulesPanel network={network} />
         </ErrorBoundary>
       </main>
 
