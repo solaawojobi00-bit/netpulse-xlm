@@ -1,4 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type Server, createServer } from "http";
+import type { AddressInfo } from "net";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   type AlertOptions,
   type AlertState,
@@ -232,6 +243,35 @@ describe("payload formats", () => {
     expect(body.blocks).toHaveLength(2);
   });
 
+  it("produces a Telegram sendMessage body addressed to the chat", () => {
+    const body = formatPayload(event, "telegram", "-1001234567890") as {
+      chat_id: string;
+      text: string;
+      parse_mode: string;
+    };
+
+    expect(body.chat_id).toBe("-1001234567890");
+    expect(body.parse_mode).toBe("HTML");
+    // The bold first line is what the chat list preview shows.
+    expect(body.text.startsWith("<b>High network congestion</b>\n")).toBe(true);
+    expect(body.text).toContain("88.0%");
+    // The context line keeps the raw numbers out of the prose.
+    expect(body.text).toContain("network: <code>mainnet</code>");
+    expect(body.text).toContain("threshold: <code>80%</code>");
+    expect(body.text).toContain("2026-09-04T12:00:00.000Z");
+  });
+
+  it("escapes HTML in interpolated values rather than emitting raw markup", () => {
+    // Nothing produces a network named like this today; the escaping exists so
+    // that a later change to the prose cannot silently break every send, since
+    // Telegram rejects the whole message on one unparseable entity.
+    const hostile = { ...event, network: "<b>main&net</b>" as never };
+    const body = formatPayload(hostile, "telegram", "42") as { text: string };
+
+    expect(body.text).toContain("&lt;b&gt;main&amp;net&lt;/b&gt;");
+    expect(body.text).not.toContain("<b>main");
+  });
+
   it("says recovered, not congested, on a recovery", () => {
     const recovery = { ...event, kind: "recovery" as const, usage: 0.4 };
 
@@ -246,6 +286,13 @@ describe("payload formats", () => {
       embeds: { title: string }[];
     };
     expect(discord.embeds[0].title).toBe("Network congestion recovered");
+
+    const telegram = formatPayload(recovery, "telegram", "42") as {
+      text: string;
+    };
+    expect(
+      telegram.text.startsWith("<b>Network congestion recovered</b>"),
+    ).toBe(true);
   });
 });
 
@@ -275,12 +322,27 @@ describe("configuration", () => {
     expect(getAlertConfig()?.format).toBe("generic");
   });
 
-  it("accepts discord and slack case-insensitively", () => {
+  it("accepts discord, slack and telegram case-insensitively", () => {
     process.env.ALERT_WEBHOOK_URL = "https://example.test/hook";
     process.env.ALERT_WEBHOOK_FORMAT = "DISCORD";
     expect(getAlertConfig()?.format).toBe("discord");
     process.env.ALERT_WEBHOOK_FORMAT = " Slack ";
     expect(getAlertConfig()?.format).toBe("slack");
+    process.env.ALERT_WEBHOOK_FORMAT = " Telegram ";
+    expect(getAlertConfig()?.format).toBe("telegram");
+  });
+
+  it("reads the Telegram chat id, treating blank as absent", () => {
+    process.env.ALERT_WEBHOOK_URL = "https://example.test/hook";
+
+    delete process.env.ALERT_TELEGRAM_CHAT_ID;
+    expect(getAlertConfig()?.telegramChatId).toBeNull();
+
+    process.env.ALERT_TELEGRAM_CHAT_ID = "   ";
+    expect(getAlertConfig()?.telegramChatId).toBeNull();
+
+    process.env.ALERT_TELEGRAM_CHAT_ID = "  -1001234567890 ";
+    expect(getAlertConfig()?.telegramChatId).toBe("-1001234567890");
   });
 
   it("reuses CONGESTION_ALERT_THRESHOLD rather than a second threshold", () => {
@@ -304,6 +366,7 @@ describe("delivery", () => {
   const config = {
     webhookUrl: "https://example.test/hook",
     format: "generic" as const,
+    telegramChatId: null,
     options: OPTS,
     timeoutMs: 5000,
   };
@@ -491,5 +554,245 @@ describe("wiring: a fee snapshot drives the alert", () => {
 
     // A testnet snapshot must not move mainnet.
     expect(getAlertState("mainnet").status).toBe("ok");
+  });
+});
+
+/*
+ * The Telegram adapter's whole job is to produce a body the Bot API accepts,
+ * so a stubbed `fetch` resolving 200 would assert nothing: it answers the same
+ * way to a correct payload and to an empty object. These tests run a real HTTP
+ * server on loopback that rejects what the Bot API rejects — missing chat_id,
+ * empty or oversized text, an unknown parse_mode, and HTML it cannot parse —
+ * and send real requests to it through `deliverAlert`.
+ *
+ * `parseEntities` is deliberately the restrictive reading of the documented
+ * HTML mode: only the tags the API lists, properly nested, with every other
+ * `<`, `>` and `&` escaped.
+ */
+describe("telegram delivery against a live sendMessage endpoint", () => {
+  const ALLOWED_TAG = /^<\/?(b|strong|i|em|u|s|code|pre)>$/;
+  const TAG = /<[^>]*>/g;
+
+  /** The Bot API's description of the problem, or null if the text parses. */
+  function parseEntities(text: string): string | null {
+    const open: string[] = [];
+    for (const [tag] of text.matchAll(TAG)) {
+      if (!ALLOWED_TAG.test(tag)) return `unsupported start tag "${tag}"`;
+      const name = tag.replace(/[</>]/g, "");
+      if (tag.startsWith("</")) {
+        if (open.pop() !== name) return `can't find start of "${name}"`;
+      } else {
+        open.push(name);
+      }
+    }
+    if (open.length > 0) return `can't find end of "${open.at(-1)}"`;
+
+    const bare = text.replace(TAG, "");
+    if (/[<>]/.test(bare)) return "unescaped angle bracket in text";
+    if (/&(?!(amp|lt|gt|quot);)/.test(bare)) return "unsupported entity";
+    return null;
+  }
+
+  const received: unknown[] = [];
+  let server: Server;
+  let sendMessageUrl: string;
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const fail = (description: string) => {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error_code: 400, description }));
+        };
+
+        if (req.method !== "POST") return fail("Bad Request: POST required");
+        if (!/^\/bot[^/]+\/sendMessage$/.test(req.url ?? "")) {
+          return fail("Not Found: method not found");
+        }
+        if (!req.headers["content-type"]?.includes("application/json")) {
+          return fail("Bad Request: unsupported content type");
+        }
+
+        let body: Record<string, unknown>;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          return fail("Bad Request: can't parse JSON");
+        }
+        received.push(body);
+
+        const chatId = body.chat_id;
+        const emptyChatId =
+          typeof chatId === "number"
+            ? false
+            : typeof chatId !== "string" || chatId.trim() === "";
+        if (emptyChatId) return fail("Bad Request: chat_id is empty");
+
+        const text = body.text;
+        if (typeof text !== "string" || text.length === 0) {
+          return fail("Bad Request: message text is empty");
+        }
+        if (text.length > 4096) return fail("Bad Request: message is too long");
+
+        const mode = body.parse_mode;
+        if (mode !== undefined && mode !== "HTML" && mode !== "MarkdownV2") {
+          return fail("Bad Request: can't parse entities: unknown parse mode");
+        }
+        if (mode === "HTML") {
+          const problem = parseEntities(text);
+          if (problem) {
+            return fail(`Bad Request: can't parse entities: ${problem}`);
+          }
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ ok: true, result: { message_id: received.length } }),
+        );
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as AddressInfo;
+    sendMessageUrl = `http://127.0.0.1:${port}/bot123456:TEST-TOKEN/sendMessage`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve())),
+    );
+  });
+
+  beforeEach(() => {
+    received.length = 0;
+  });
+
+  const event = {
+    kind: "alert" as const,
+    network: "mainnet" as const,
+    usage: 0.88,
+    threshold: 0.8,
+    timestamp: "2026-09-04T12:00:00.000Z",
+  };
+
+  function telegramConfig(chatId: string | null) {
+    return {
+      webhookUrl: sendMessageUrl,
+      format: "telegram" as const,
+      telegramChatId: chatId,
+      options: OPTS,
+      timeoutMs: 5000,
+    };
+  }
+
+  async function post(body: unknown) {
+    const res = await fetch(sendMessageUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return {
+      status: res.status,
+      body: (await res.json()) as { ok: boolean; description?: string },
+    };
+  }
+
+  it("the endpoint rejects what the Bot API rejects", async () => {
+    /*
+     * A control for the tests below. Without it an endpoint that accepted
+     * anything would pass them no matter what the adapter emitted.
+     */
+    const cases: [unknown, string][] = [
+      [{ text: "hi" }, "chat_id is empty"],
+      [{ chat_id: "  ", text: "hi" }, "chat_id is empty"],
+      [{ chat_id: "1", text: "" }, "text is empty"],
+      [{ chat_id: "1", text: "a < b", parse_mode: "HTML" }, "parse entities"],
+      [
+        { chat_id: "1", text: "<b>unclosed", parse_mode: "HTML" },
+        "parse entities",
+      ],
+      [
+        { chat_id: "1", text: "<marquee>x</marquee>", parse_mode: "HTML" },
+        "parse entities",
+      ],
+      [
+        { chat_id: "1", text: "hi", parse_mode: "Nonsense" },
+        "unknown parse mode",
+      ],
+    ];
+
+    for (const [body, expected] of cases) {
+      const res = await post(body);
+      expect(res.status).toBe(400);
+      expect(res.body.description).toContain(expected);
+    }
+
+    // ...and accepts the shape the adapter aims for, so the rejections above
+    // are not simply an endpoint that refuses everything.
+    const ok = await post({
+      chat_id: "1",
+      text: "<b>hi</b>",
+      parse_mode: "HTML",
+    });
+    expect(ok.status).toBe(200);
+  });
+
+  it("sends an alert the endpoint accepts", async () => {
+    await expect(
+      deliverAlert(event, telegramConfig("-1001234567890")),
+    ).resolves.toBe(true);
+
+    expect(received).toHaveLength(1);
+    const body = received[0] as { chat_id: string; text: string };
+    expect(body.chat_id).toBe("-1001234567890");
+    expect(body.text).toContain("High network congestion");
+    expect(body.text).toContain("88.0%");
+  });
+
+  it("sends a recovery the endpoint accepts", async () => {
+    const recovery = { ...event, kind: "recovery" as const, usage: 0.4 };
+
+    await expect(deliverAlert(recovery, telegramConfig("42"))).resolves.toBe(
+      true,
+    );
+
+    const body = received[0] as { text: string };
+    expect(body.text).toContain("Network congestion recovered");
+    expect(body.text).toContain("40.0%");
+  });
+
+  it("sends parseable HTML even when the text carries markup characters", async () => {
+    // Proves the escaping survives a real parse rather than only a substring
+    // assertion: an unescaped `<` here comes back 400 and delivery fails.
+    const hostile = { ...event, network: "a <b> & c" as never };
+
+    await expect(deliverAlert(hostile, telegramConfig("42"))).resolves.toBe(
+      true,
+    );
+    expect((received[0] as { text: string }).text).toContain(
+      "&lt;b&gt; &amp; c",
+    );
+  });
+
+  it("does not spend a request when no chat id is configured", async () => {
+    // sendMessage with an empty chat_id is a guaranteed 400, so the adapter
+    // reports the misconfiguration instead of letting the API discover it.
+    await expect(deliverAlert(event, telegramConfig(null))).resolves.toBe(
+      false,
+    );
+
+    expect(received).toEqual([]);
+  });
+
+  it("reports a Bot API rejection without throwing", async () => {
+    const wrongMethod = sendMessageUrl.replace("/sendMessage", "/sendPhoto");
+
+    await expect(
+      deliverAlert(event, { ...telegramConfig("42"), webhookUrl: wrongMethod }),
+    ).resolves.toBe(false);
   });
 });

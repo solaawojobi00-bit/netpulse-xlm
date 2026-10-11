@@ -141,9 +141,29 @@ export function nextAlertState(
   return { state: prev, event: null };
 }
 
-export type WebhookFormat = "generic" | "discord" | "slack";
+export type WebhookFormat = "generic" | "discord" | "slack" | "telegram";
 
 const DISCORD_COLOR = { alert: 0xf5615c, recovery: 0x3ecf8e } as const;
+
+function title(event: AlertEvent): string {
+  return event.kind === "alert"
+    ? "High network congestion"
+    : "Network congestion recovered";
+}
+
+/**
+ * Telegram's HTML parse mode rejects a message containing a stray `<` or an
+ * unrecognised entity, and the whole send fails rather than degrading. Escaping
+ * the three reserved characters is what the Bot API documents, and it is done
+ * on every interpolated value rather than only the ones that look risky today —
+ * the alert text is assembled from prose that may gain a `<` later.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 function describe(event: AlertEvent): string {
   const pct = `${(event.usage * 100).toFixed(1)}%`;
@@ -154,13 +174,21 @@ function describe(event: AlertEvent): string {
 }
 
 /**
- * Shapes the event for whichever service is on the other end. Discord and
- * Slack both reject bodies they do not recognise, so a single generic payload
- * would work with neither.
+ * Shapes the event for whichever service is on the other end. Discord, Slack
+ * and Telegram all reject bodies they do not recognise, so a single generic
+ * payload would work with none of them.
+ *
+ * `telegramChatId` is the one piece of routing the event cannot carry: Discord
+ * and Slack webhook URLs name their own destination channel, but a Telegram bot
+ * token addresses no chat by itself, so `sendMessage` needs the recipient in
+ * the body. It is ignored by every other format, and `deliverAlert` refuses to
+ * send a Telegram alert without it rather than letting the API reject an empty
+ * `chat_id`.
  */
 export function formatPayload(
   event: AlertEvent,
   format: WebhookFormat,
+  telegramChatId?: string,
 ): unknown {
   const text = describe(event);
 
@@ -169,10 +197,7 @@ export function formatPayload(
       content: text,
       embeds: [
         {
-          title:
-            event.kind === "alert"
-              ? "High network congestion"
-              : "Network congestion recovered",
+          title: title(event),
           description: text,
           color: DISCORD_COLOR[event.kind],
           timestamp: event.timestamp,
@@ -204,11 +229,7 @@ export function formatPayload(
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `*${
-              event.kind === "alert"
-                ? "High network congestion"
-                : "Network congestion recovered"
-            }*\n${text}`,
+            text: `*${title(event)}*\n${text}`,
           },
         },
         {
@@ -221,6 +242,28 @@ export function formatPayload(
           ],
         },
       ],
+    };
+  }
+
+  if (format === "telegram") {
+    const usage = `${(event.usage * 100).toFixed(1)}%`;
+    const limit = `${(event.threshold * 100).toFixed(0)}%`;
+
+    return {
+      chat_id: telegramChatId ?? "",
+      /*
+       * One message, not an attachment or a card: sendMessage has no richer
+       * shape to use. The bold first line gives the chat list preview
+       * something to show, and the trailing context line keeps the raw
+       * numbers available without parsing them back out of the prose.
+       */
+      text: [
+        `<b>${escapeHtml(title(event))}</b>`,
+        escapeHtml(text),
+        "",
+        `network: <code>${escapeHtml(event.network)}</code> · usage: <code>${escapeHtml(usage)}</code> · threshold: <code>${escapeHtml(limit)}</code> · ${escapeHtml(event.timestamp)}`,
+      ].join("\n"),
+      parse_mode: "HTML",
     };
   }
 
@@ -237,6 +280,8 @@ export function formatPayload(
 export interface AlertConfig {
   webhookUrl: string;
   format: WebhookFormat;
+  /** Recipient for the telegram format; null for every other format. */
+  telegramChatId: string | null;
   options: AlertOptions;
   timeoutMs: number;
 }
@@ -247,7 +292,9 @@ const DEFAULT_TIMEOUT_MS = 5000;
 
 function parseFormat(raw: string | undefined): WebhookFormat {
   const value = raw?.trim().toLowerCase();
-  if (value === "discord" || value === "slack") return value;
+  if (value === "discord" || value === "slack" || value === "telegram") {
+    return value;
+  }
   return "generic";
 }
 
@@ -272,6 +319,7 @@ export function getAlertConfig(): AlertConfig | null {
   return {
     webhookUrl,
     format: parseFormat(process.env.ALERT_WEBHOOK_FORMAT),
+    telegramChatId: process.env.ALERT_TELEGRAM_CHAT_ID?.trim() || null,
     options: {
       threshold: getCongestionAlertThreshold(),
       hysteresis: parseNumber(
@@ -302,6 +350,22 @@ export async function deliverAlert(
   event: AlertEvent,
   config: AlertConfig,
 ): Promise<boolean> {
+  /*
+   * Checked here rather than in getAlertConfig: configuration is read on every
+   * poll, so warning there would repeat the same line every few seconds for as
+   * long as the misconfiguration lasts. An alert firing is rare enough that one
+   * log line per attempt stays readable, and skipping the request avoids a
+   * guaranteed 400 from the Bot API.
+   */
+  if (config.format === "telegram" && !config.telegramChatId) {
+    logger.warn("Telegram alert skipped: ALERT_TELEGRAM_CHAT_ID is not set", {
+      component: "alerts",
+      network: event.network,
+      kind: event.kind,
+    });
+    return false;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -309,7 +373,9 @@ export async function deliverAlert(
     const res = await fetch(config.webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formatPayload(event, config.format)),
+      body: JSON.stringify(
+        formatPayload(event, config.format, config.telegramChatId ?? undefined),
+      ),
       signal: controller.signal,
     });
 

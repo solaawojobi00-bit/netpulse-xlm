@@ -95,8 +95,16 @@ it unset and nothing changes — alerting is off by default and no other
 behaviour depends on it.
 
 `ALERT_WEBHOOK_FORMAT` picks the body shape: `generic` (default), `discord`,
-or `slack`. Discord and Slack both reject bodies they do not recognise, so
-this has to match whatever the URL points at.
+`slack`, or `telegram`. All three services reject bodies they do not
+recognise, so this has to match whatever the URL points at.
+
+Telegram needs one extra setting. A Discord or Slack webhook URL names its
+own destination channel, but a bot token addresses no chat by itself, so
+point `ALERT_WEBHOOK_URL` at `https://api.telegram.org/bot<token>/sendMessage`
+and set `ALERT_TELEGRAM_CHAT_ID` to the recipient — a numeric id (negative for
+groups and channels) or an `@channelusername`. Without the chat id a Telegram
+alert is logged and skipped rather than sent, since the API would reject it.
+Note the URL carries the bot token, so treat it as a credential.
 
 Alerts are **edge-triggered**: one notification when a network crosses into
 the alerting state, not one per poll while it stays there. Two independent
