@@ -15,8 +15,10 @@
  */
 import axe from "axe-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { AlertRulesPanel } from "./components/AlertRulesPanel";
 import { StatTile } from "./components/StatTile";
 import { ChartCard } from "./components/ChartCard";
 import { HistoryView } from "./components/HistoryView";
@@ -29,6 +31,7 @@ import type {
   SorobanMetricsResponse,
   TrendPoint,
 } from "./api";
+import type { AlertRule } from "./alertRules";
 
 vi.mock("./useSubscription", () => ({
   useSubscription: () => mockSubscription,
@@ -45,6 +48,16 @@ vi.mock("./api", async (importOriginal) => ({
   fetchHistory: () => Promise.resolve({ range: "24h", points: historyPoints }),
   fetchTrends: () =>
     Promise.resolve({ network: "mainnet", range: "90d", points: trendPoints }),
+}));
+
+/*
+ * Stubbed for the same reason, and with rules rather than an empty list: an
+ * empty panel would hide every control this issue adds from the axe run —
+ * the rule cards, their chips and their delivery target rows.
+ */
+vi.mock("./alertRules", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./alertRules")>()),
+  fetchAlertRules: () => Promise.resolve(alertRules),
 }));
 
 async function expectNoViolations(container: HTMLElement) {
@@ -92,6 +105,45 @@ const trendPoints: TrendPoint[] = Array.from({ length: 4 }, (_, i) => ({
   p50Fee: 120,
   p90Fee: 900,
 }));
+
+const alertRules: AlertRule[] = [
+  {
+    id: "rule-1",
+    name: "Congestion over 80%",
+    network: "mainnet",
+    metric: "congestion",
+    comparison: "above",
+    threshold: 0.8,
+    enabled: true,
+    cooldownSeconds: 900,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    targets: [
+      {
+        id: "target-1",
+        ruleId: "rule-1",
+        type: "slack",
+        urlPreview: "https://hooks.slack.com/***",
+        enabled: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  },
+  {
+    id: "rule-2",
+    name: "Slow ledgers",
+    network: "mainnet",
+    metric: "closeTime",
+    comparison: "above",
+    threshold: 8,
+    enabled: false,
+    cooldownSeconds: 300,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    targets: [],
+  },
+];
 
 const health: HealthResponse = {
   status: "ok",
@@ -192,6 +244,24 @@ describe("axe: no mechanical violations", () => {
     );
     await expectNoViolations(container);
   });
+
+  /*
+   * The alert panel is the only part of the dashboard with inputs, so it is
+   * the only part where a missing label is possible at all — worth a case of
+   * its own with both forms open, which the assembled-page run never sees.
+   */
+  it("alert panel with the rule and target forms open", async () => {
+    const { container } = render(<AlertRulesPanel network="mainnet" />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "New rule" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Add target to Slow ledgers/ }),
+    );
+
+    await expectNoViolations(container);
+  });
 });
 
 /*
@@ -206,6 +276,9 @@ describe("axe: the assembled page", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("img").length).toBeGreaterThan(0),
     );
+    // The alert panel arrives on its own request; axe must see it filled
+    // rather than in its loading state.
+    await screen.findByRole("heading", { name: "Congestion over 80%" });
     await expectNoViolations(container);
   });
 

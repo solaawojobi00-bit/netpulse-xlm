@@ -147,7 +147,7 @@ export function useSubscription(network: Network): SubscriptionData {
 
     function scheduleNextPoll() {
       if (!cancelled && polling) {
-        fallbackTimer = setTimeout(pollFallback, POLL_FALLBACK_MS);
+        fallbackTimer = setTimeout(() => void pollFallback(), POLL_FALLBACK_MS);
       }
     }
 

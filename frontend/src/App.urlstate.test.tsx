@@ -11,6 +11,7 @@ import type { HealthResponse, TrendPoint } from "./api";
 
 const fetchHistory = vi.fn();
 const fetchTrends = vi.fn();
+const fetchAlertRules = vi.fn();
 
 vi.mock("./useSubscription", () => ({
   useSubscription: (network: string) => {
@@ -34,6 +35,16 @@ vi.mock("./api", async (importOriginal) => {
     ...actual,
     fetchHistory: (...args: unknown[]) => fetchHistory(...args),
     fetchTrends: (...args: unknown[]) => fetchTrends(...args),
+  };
+});
+
+// The alert panel is driven by the same network state as the charts, so it
+// issues a request of its own on mount and whenever that state changes.
+vi.mock("./alertRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./alertRules")>();
+  return {
+    ...actual,
+    fetchAlertRules: (...args: unknown[]) => fetchAlertRules(...args),
   };
 });
 
@@ -80,6 +91,8 @@ beforeEach(() => {
     range: "90d",
     points: [],
   });
+  fetchAlertRules.mockReset();
+  fetchAlertRules.mockResolvedValue([]);
   setUrl("");
 });
 
@@ -156,6 +169,24 @@ describe("view state in the URL", () => {
     expect(window.location.search).toBe("?network=testnet");
     await waitFor(() =>
       expect(fetchHistory).toHaveBeenCalledWith("testnet", "24h"),
+    );
+  });
+
+  it("lists the alert rules of the network the URL names, then of the one picked", async () => {
+    setUrl("?network=testnet");
+    render(<App />);
+
+    // Not "whichever network happens to be default": the panel is driven by
+    // the same state as the charts, so a shared link opens on its rules too.
+    await waitFor(() =>
+      expect(fetchAlertRules).toHaveBeenCalledWith({ network: "testnet" }),
+    );
+    expect(fetchAlertRules).not.toHaveBeenCalledWith({ network: "mainnet" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Mainnet" }));
+
+    await waitFor(() =>
+      expect(fetchAlertRules).toHaveBeenCalledWith({ network: "mainnet" }),
     );
   });
 

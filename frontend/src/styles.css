@@ -766,6 +766,336 @@ body {
   text-align: center;
 }
 
+/*
+ * Alert rule management (#214).
+ *
+ * Built from the tokens the rest of the dashboard already uses — surface,
+ * border, accent, good/bad — so the panel reads as another section of the same
+ * page rather than a settings screen bolted onto it. No new colours, which
+ * also means `scripts/contrast-audit.mjs` already covers every pair here.
+ */
+.alert-section {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.alert-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.alert-section__header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.alert-section__subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Reserves its line whether or not there is a message, so confirming a save
+   does not shift the rules below it. */
+.alert-section__status {
+  margin: 0 0 12px;
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--good-color);
+}
+
+.alert-section__note {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-color);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.alert-section__note--error {
+  border-color: var(--bad-tint-border);
+  background: var(--bad-tint-bg);
+  color: var(--text-color);
+}
+
+.alert-section__note--error p {
+  margin: 0 0 8px;
+}
+
+.alert-rule-list,
+.alert-target-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-rule-list {
+  display: grid;
+  gap: 12px;
+}
+
+.alert-rule {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-color);
+  padding: 14px 16px;
+}
+
+.alert-rule__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.alert-rule__name {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.alert-rule__summary {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.alert-rule__meta {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.alert-rule__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.alert-chip {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border-color);
+}
+
+.alert-chip--on {
+  color: var(--good-color);
+  background: var(--good-tint-bg);
+  border-color: var(--good-tint-border);
+}
+
+.alert-chip--off {
+  color: var(--text-muted);
+  background: var(--bg-color);
+}
+
+.alert-rule__targets {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.alert-rule__targets-heading {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.alert-rule__empty {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.alert-target-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.alert-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.alert-target__type {
+  font-weight: 600;
+}
+
+.alert-target__url {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 2px 6px;
+  word-break: break-all;
+}
+
+.alert-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--bad-tint-border);
+  background: var(--bad-tint-bg);
+  border-radius: 8px;
+}
+
+.alert-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text-color);
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.alert-btn:hover:enabled {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.alert-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.alert-btn--primary {
+  border-color: var(--accent-tint-border);
+  background: var(--accent-tint-bg);
+  color: var(--accent-color);
+}
+
+.alert-btn--danger:hover:enabled {
+  border-color: var(--bad-color);
+  color: var(--bad-color);
+}
+
+.alert-btn--small {
+  padding: 3px 8px;
+  font-size: 0.8rem;
+}
+
+.alert-form {
+  margin: 0 0 12px;
+}
+
+.alert-form__fieldset {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-color);
+  padding: 12px 16px 16px;
+  margin: 0;
+}
+
+.alert-form__legend {
+  padding: 0 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.alert-form__network {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.alert-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.alert-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.alert-form__error {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: var(--bad-color);
+}
+
+.alert-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alert-field--wide {
+  grid-column: 1 / -1;
+}
+
+.alert-field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-field label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.alert-field input,
+.alert-field select {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text-color);
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.alert-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+.alert-field input:focus-visible,
+.alert-field select:focus-visible,
+.alert-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.alert-field input[aria-invalid="true"] {
+  border-color: var(--bad-color);
+}
+
+.alert-field__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.alert-field__error {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--bad-color);
+}
+
 @media (max-width: 480px) {
   .app {
     padding: 16px 12px 36px;
