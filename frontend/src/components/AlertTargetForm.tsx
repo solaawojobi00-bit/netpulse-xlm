@@ -54,7 +54,11 @@ export function AlertTargetForm({
     error instanceof Error && !detailFor(error, "url") ? error.message : null;
 
   return (
-    <form className="alert-form alert-form--target" onSubmit={handleSubmit} noValidate>
+    <form
+      className="alert-form alert-form--target"
+      onSubmit={handleSubmit}
+      noValidate
+    >
       <fieldset className="alert-form__fieldset" disabled={busy}>
         <legend className="alert-form__legend">Add a delivery target</legend>
 

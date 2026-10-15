@@ -9,6 +9,7 @@
  * as JSON.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AlertMetric } from "./alertRules";
 import {
   startAlertRuleServer,
   startLegacyBackend,
@@ -23,7 +24,9 @@ let client: typeof import("./alertRules");
  * imported *after* the variable is stubbed — hence the reset and the dynamic
  * import rather than a static one at the top of the file.
  */
-async function clientFor(origin: string): Promise<typeof import("./alertRules")> {
+async function clientFor(
+  origin: string,
+): Promise<typeof import("./alertRules")> {
   vi.stubEnv("VITE_API_URL", origin);
   vi.resetModules();
   return import("./alertRules");
@@ -94,7 +97,11 @@ describe("writing rules", () => {
   });
 
   it("patches only the field it was given", async () => {
-    const id = server.seed({ name: "Congestion", enabled: true, threshold: 0.8 });
+    const id = server.seed({
+      name: "Congestion",
+      enabled: true,
+      threshold: 0.8,
+    });
 
     const updated = await client.updateAlertRule(id, { enabled: false });
 
@@ -127,9 +134,7 @@ describe("writing rules", () => {
     const apiError = error as InstanceType<typeof client.AlertRuleApiError>;
     expect(apiError.status).toBe(400);
     expect(apiError.code).toBe("validation_failed");
-    expect(client.detailFor(apiError, "threshold")).toMatch(
-      /between 0 and 1/,
-    );
+    expect(client.detailFor(apiError, "threshold")).toMatch(/between 0 and 1/);
     // Nothing was stored, so the panel is not showing a rule that does not
     // exist.
     expect(server.rules()).toHaveLength(0);
@@ -150,7 +155,9 @@ describe("writing rules", () => {
     const apiError = error as InstanceType<typeof client.AlertRuleApiError>;
     expect(apiError.status).toBe(409);
     expect(apiError.code).toBe("conflict");
-    expect(apiError.message).toBe('An alert rule named "Taken" already exists.');
+    expect(apiError.message).toBe(
+      'An alert rule named "Taken" already exists.',
+    );
     // A conflict is about the rule, not a field, so there is no detail to
     // hang on an input.
     expect(client.detailFor(apiError, "name")).toBeUndefined();
@@ -185,7 +192,9 @@ describe("delivery targets", () => {
   it("toggles a target without touching the rest of it", async () => {
     const ruleId = server.seed({
       name: "Congestion",
-      targets: [{ type: "discord", url: "https://discord.com/api/webhooks/1/x" }],
+      targets: [
+        { type: "discord", url: "https://discord.com/api/webhooks/1/x" },
+      ],
     });
     const targetId = server.rule(ruleId)!.targets[0].id;
 
@@ -222,7 +231,10 @@ describe("delivery targets", () => {
     const ruleId = server.seed({ name: "Congestion" });
 
     const error = await client
-      .createAlertTarget(ruleId, { type: "generic", url: "ftp://example.com/x" })
+      .createAlertTarget(ruleId, {
+        type: "generic",
+        url: "ftp://example.com/x",
+      })
       .catch((err: unknown) => err);
 
     expect(client.detailFor(error, "url")).toBe(
@@ -246,7 +258,9 @@ describe("a backend without the management routes", () => {
     expect(apiError.status).toBe(404);
     // No envelope to read, so the code says so rather than inventing one.
     expect(apiError.code).toBe("unexpected_response");
-    expect(apiError.message).toBe("GET /api/alert-rules?network=mainnet failed.");
+    expect(apiError.message).toBe(
+      "GET /api/alert-rules?network=mainnet failed.",
+    );
 
     await legacy.close();
   });
@@ -280,20 +294,20 @@ describe("the local field checks agree with the API", () => {
     "refuses $label in the browser and at the API",
     async ({ metric, threshold }) => {
       expect(
-        client.thresholdProblem(metric as client.AlertMetric, threshold),
+        client.thresholdProblem(metric as AlertMetric, threshold),
       ).not.toBeNull();
 
       const error = await client
         .createAlertRule({
           name: `Rule for ${metric} ${threshold}`,
           network: "mainnet",
-          metric: metric as client.AlertMetric,
+          metric: metric as AlertMetric,
           threshold,
         })
         .catch((err: unknown) => err);
 
       expect(client.detailFor(error, "threshold")).toBe(
-        client.thresholdProblem(metric as client.AlertMetric, threshold),
+        client.thresholdProblem(metric as AlertMetric, threshold),
       );
     },
   );
@@ -302,32 +316,38 @@ describe("the local field checks agree with the API", () => {
     ["congestion", 0.8],
     ["closeTime", 8],
     ["baseFee", 150],
-  ] as const)("accepts a valid %s threshold on both sides", async (metric, threshold) => {
-    expect(client.thresholdProblem(metric, threshold)).toBeNull();
+  ] as const)(
+    "accepts a valid %s threshold on both sides",
+    async (metric, threshold) => {
+      expect(client.thresholdProblem(metric, threshold)).toBeNull();
 
-    const rule = await client.createAlertRule({
-      name: `Valid ${metric}`,
-      network: "mainnet",
-      metric,
-      threshold,
-    });
+      const rule = await client.createAlertRule({
+        name: `Valid ${metric}`,
+        network: "mainnet",
+        metric,
+        threshold,
+      });
 
-    expect(server.rule(rule.id)?.threshold).toBe(threshold);
-  });
+      expect(server.rule(rule.id)?.threshold).toBe(threshold);
+    },
+  );
 
   it.each([
     ["not-a-url", "url must be an absolute http(s) URL."],
     ["ftp://example.com/hook", "url must use the http or https scheme."],
-  ])("refuses the URL %s in the browser and at the API", async (url, message) => {
-    expect(client.urlProblem(url)).toBe(message);
+  ])(
+    "refuses the URL %s in the browser and at the API",
+    async (url, message) => {
+      expect(client.urlProblem(url)).toBe(message);
 
-    const ruleId = server.seed({ name: `Rule for ${url}` });
-    const error = await client
-      .createAlertTarget(ruleId, { type: "generic", url })
-      .catch((err: unknown) => err);
+      const ruleId = server.seed({ name: `Rule for ${url}` });
+      const error = await client
+        .createAlertTarget(ruleId, { type: "generic", url })
+        .catch((err: unknown) => err);
 
-    expect(client.detailFor(error, "url")).toBe(message);
-  });
+      expect(client.detailFor(error, "url")).toBe(message);
+    },
+  );
 
   it("refuses an over-long rule name on both sides", async () => {
     const name = "x".repeat(client.MAX_RULE_NAME_LENGTH + 1);

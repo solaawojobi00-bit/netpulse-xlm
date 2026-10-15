@@ -47,7 +47,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, deps: unknown[] = []) {
 
     function scheduleNext() {
       if (!cancelled) {
-        timer = setTimeout(tick, POLL_INTERVAL_MS);
+        timer = setTimeout(() => void tick(), POLL_INTERVAL_MS);
       }
     }
 

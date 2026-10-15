@@ -21,6 +21,10 @@ import { createServer, type Server } from "node:http";
 
 type Json = Record<string, unknown>;
 
+function text(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 const NETWORKS = ["mainnet", "testnet"];
 const METRICS = ["congestion", "closeTime", "baseFee"];
 const COMPARISONS = ["above", "below"];
@@ -162,7 +166,8 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
   let failOnce = false;
 
   /** Monotonic and deterministic: a real clock would make `updatedAt` flaky. */
-  const stamp = () => new Date(Date.UTC(2026, 0, 1, 0, 0, clock++)).toISOString();
+  const stamp = () =>
+    new Date(Date.UTC(2026, 0, 1, 0, 0, clock++)).toISOString();
 
   function validateRuleBody(
     body: Json,
@@ -194,17 +199,20 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
         require("name", "String must contain at least 1 character(s)");
       if (!NETWORKS.includes(String(body.network)))
         require("network", "Invalid enum value.");
-      if (!METRICS.includes(String(body.metric)))
+      if (!METRICS.includes(text(body.metric)))
         require("metric", "Invalid enum value.");
     }
 
-    if (typeof body.name === "string" && body.name.length > MAX_RULE_NAME_LENGTH)
-      require(
-        "name",
-        `String must contain at most ${MAX_RULE_NAME_LENGTH} character(s)`,
-      );
+    if (
+      typeof body.name === "string" &&
+      body.name.length > MAX_RULE_NAME_LENGTH
+    )
+      require("name", `String must contain at most ${MAX_RULE_NAME_LENGTH} character(s)`);
 
-    if (body.comparison !== undefined && !COMPARISONS.includes(String(body.comparison)))
+    if (
+      body.comparison !== undefined &&
+      !COMPARISONS.includes(text(body.comparison))
+    )
       require("comparison", "Invalid enum value.");
 
     if (body.cooldownSeconds !== undefined) {
@@ -215,10 +223,7 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
         value < 0 ||
         value > MAX_COOLDOWN_SECONDS
       )
-        require(
-          "cooldownSeconds",
-          `Number must be an integer between 0 and ${MAX_COOLDOWN_SECONDS}`,
-        );
+        require("cooldownSeconds", `Number must be an integer between 0 and ${MAX_COOLDOWN_SECONDS}`);
     }
 
     if (details.length > 0) return { details };
@@ -276,7 +281,10 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
         code: string,
         message: string,
         details?: { path: string; message: string }[],
-      ) => send(status, { error: details ? { code, message, details } : { code, message } });
+      ) =>
+        send(status, {
+          error: details ? { code, message, details } : { code, message },
+        });
 
       const invalid = (details: { path: string; message: string }[]) =>
         fail(
@@ -322,7 +330,9 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
           const enabled = url.searchParams.get("enabled");
           const rules = [...store.values()]
             .filter((r) => !network || r.network === network)
-            .filter((r) => enabled === null || r.enabled === (enabled === "true"));
+            .filter(
+              (r) => enabled === null || r.enabled === (enabled === "true"),
+            );
           send(200, { rules: rules.map(serialiseRule) });
           return;
         }
@@ -342,7 +352,11 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
 
           const name = String(body.name).trim();
           if ([...store.values()].some((r) => r.name === name)) {
-            fail(409, "conflict", `An alert rule named "${name}" already exists.`);
+            fail(
+              409,
+              "conflict",
+              `An alert rule named "${name}" already exists.`,
+            );
             return;
           }
 
@@ -351,8 +365,8 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
             id: randomUUID(),
             name,
             network: String(body.network),
-            metric: String(body.metric),
-            comparison: String(body.comparison ?? "above"),
+            metric: text(body.metric),
+            comparison: text(body.comparison ?? "above"),
             threshold: Number(body.threshold),
             enabled: body.enabled === undefined ? true : Boolean(body.enabled),
             cooldownSeconds: Number(body.cooldownSeconds ?? 900),
@@ -388,7 +402,10 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
         if (method === "PATCH") {
           if (Object.keys(body).length === 0) {
             invalid([
-              { path: "(body)", message: "Provide at least one field to update." },
+              {
+                path: "(body)",
+                message: "Provide at least one field to update.",
+              },
             ]);
             return;
           }
@@ -400,7 +417,8 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
           if (
             typeof body.name === "string" &&
             [...store.values()].some(
-              (r) => r.id !== rule.id && r.name === body.name.trim(),
+              (r) =>
+                r.id !== rule.id && r.name === (body.name as string).trim(),
             )
           ) {
             fail(
@@ -412,10 +430,11 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
           }
 
           if (typeof body.name === "string") rule.name = body.name.trim();
-          if (body.metric !== undefined) rule.metric = String(body.metric);
+          if (body.metric !== undefined) rule.metric = text(body.metric);
           if (body.comparison !== undefined)
-            rule.comparison = String(body.comparison);
-          if (body.threshold !== undefined) rule.threshold = Number(body.threshold);
+            rule.comparison = text(body.comparison);
+          if (body.threshold !== undefined)
+            rule.threshold = Number(body.threshold);
           if (body.enabled !== undefined) rule.enabled = Boolean(body.enabled);
           if (body.cooldownSeconds !== undefined)
             rule.cooldownSeconds = Number(body.cooldownSeconds);
@@ -449,7 +468,7 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
 
         if (!targetId && method === "POST") {
           const details: { path: string; message: string }[] = [];
-          if (!TARGET_TYPES.includes(String(body.type)))
+          if (!TARGET_TYPES.includes(text(body.type)))
             details.push({ path: "type", message: "Invalid enum value." });
           const problem = urlProblem(body.url);
           if (problem) details.push({ path: "url", message: problem });
@@ -470,8 +489,8 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
           const created: StoredTarget = {
             id: randomUUID(),
             ruleId: rule.id,
-            type: String(body.type),
-            url: String(body.url),
+            type: text(body.type),
+            url: text(body.url),
             enabled: body.enabled === undefined ? true : Boolean(body.enabled),
             createdAt: now,
             updatedAt: now,
@@ -488,10 +507,11 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
               invalid([{ path: "url", message: problem }]);
               return;
             }
-            target.url = String(body.url);
+            target.url = text(body.url);
           }
-          if (body.type !== undefined) target.type = String(body.type);
-          if (body.enabled !== undefined) target.enabled = Boolean(body.enabled);
+          if (body.type !== undefined) target.type = text(body.type);
+          if (body.enabled !== undefined)
+            target.enabled = Boolean(body.enabled);
           target.updatedAt = stamp();
           send(200, { target: serialiseTarget(target) });
           return;
@@ -550,7 +570,9 @@ export async function startAlertRuleServer(): Promise<AlertRuleTestServer> {
     rules: () => [...store.values()],
     close: () =>
       new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
+        server.close((err) =>
+          err ? reject(new Error(err.message, { cause: err })) : resolve(),
+        ),
       ),
   };
 }
@@ -566,7 +588,9 @@ export async function startLegacyBackend(): Promise<{
 }> {
   const server = createServer((_req, res) => {
     res.writeHead(404, { "content-type": "text/html" });
-    res.end("<!DOCTYPE html><html><body>Cannot GET /api/alert-rules</body></html>");
+    res.end(
+      "<!DOCTYPE html><html><body>Cannot GET /api/alert-rules</body></html>",
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -577,7 +601,9 @@ export async function startLegacyBackend(): Promise<{
     url: `http://127.0.0.1:${address.port}`,
     close: () =>
       new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
+        server.close((err) =>
+          err ? reject(new Error(err.message, { cause: err })) : resolve(),
+        ),
       ),
   };
 }

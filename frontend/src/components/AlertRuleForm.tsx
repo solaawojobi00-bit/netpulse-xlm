@@ -78,7 +78,9 @@ export function AlertRuleForm({
   idPrefix,
 }: Props) {
   const [name, setName] = useState(rule?.name ?? "");
-  const [metric, setMetric] = useState<AlertMetric>(rule?.metric ?? "congestion");
+  const [metric, setMetric] = useState<AlertMetric>(
+    rule?.metric ?? "congestion",
+  );
   const [comparison, setComparison] = useState<AlertComparison>(
     rule?.comparison ?? "above",
   );

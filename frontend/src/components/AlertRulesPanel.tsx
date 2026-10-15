@@ -253,7 +253,11 @@ export function AlertRulesPanel({ network }: Props) {
       return (
         <div className="alert-section__note alert-section__note--error">
           <p role="alert">{loadError}</p>
-          <button type="button" className="alert-btn" onClick={() => void load()}>
+          <button
+            type="button"
+            className="alert-btn"
+            onClick={() => void load()}
+          >
             Try again
           </button>
         </div>
@@ -407,8 +411,8 @@ export function AlertRulesPanel({ network }: Props) {
 
               <div className="alert-rule__targets">
                 <h4 className="alert-rule__targets-heading">
-                  Delivery targets ({rule.targets.length}/
-                  {MAX_TARGETS_PER_RULE})
+                  Delivery targets ({rule.targets.length}/{MAX_TARGETS_PER_RULE}
+                  )
                 </h4>
 
                 {rule.targets.length === 0 ? (
@@ -482,8 +486,7 @@ export function AlertRulesPanel({ network }: Props) {
                   </ul>
                 )}
 
-                {openForm?.kind === "target" &&
-                openForm.ruleId === rule.id ? (
+                {openForm?.kind === "target" && openForm.ruleId === rule.id ? (
                   <AlertTargetForm
                     busy={busy}
                     error={formError}
@@ -533,7 +536,10 @@ export function AlertRulesPanel({ network }: Props) {
         open form are shown inside it as well, against the field at fault.
       */}
       {actionError && openForm === null && (
-        <p className="alert-section__note alert-section__note--error" role="alert">
+        <p
+          className="alert-section__note alert-section__note--error"
+          role="alert"
+        >
           {actionError}
         </p>
       )}
